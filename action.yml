@@ -1,21 +1,21 @@
-name: 'Deploy Mautic to DigitalOcean'
-description: 'Deploy Mautic 6 with Docker Compose to a DigitalOcean VPS with automated SSL and monitoring'
-author: 'escopecz'
+name: 'Deploy Mautic to Selectel'
+description: 'Deploy Mautic with Docker Compose to a Selectel VPS with automated SSL and monitoring'
+author: 'MautiBox'
 
 branding:
   icon: 'cloud'
   color: 'blue'
 
 inputs:
-  # DigitalOcean Configuration
-  digitalocean-token:
-    description: 'DigitalOcean API access token'
+  # --- Конфигурация Selectel ---
+  selectel-token:
+    description: 'Selectel API access token (X-Token)'
     required: true
   ssh-private-key:
     description: 'SSH private key for VPS access'
     required: true
   
-  # Mautic Configuration
+  # --- Конфигурация Mautic ---
   email:
     description: 'Admin email address for Mautic and SSL certificates'
     required: true
@@ -31,38 +31,33 @@ inputs:
     required: false
     default: '8001'
   
-  # Optional Configuration
+  # --- Конфигурация VPS ---
   domain:
     description: 'Domain name for your Mautic instance (optional, will use IP if not provided)'
     required: false
   vps-name:
-    description: 'Name for the DigitalOcean droplet'
+    description: 'Name for the Selectel scalet (server)'
     required: false
     default: 'mautic-vps'
-  vps-size:
-    description: 'DigitalOcean droplet size (s-1vcpu-1gb, s-1vcpu-2gb, s-2vcpu-2gb, s-2vcpu-4gb, s-4vcpu-8gb)'
+  vps-rplan:
+    description: 'Selectel server plan (e.g., small, medium, large)'
     required: false
-    default: 's-1vcpu-1gb'
-  vps-region:
-    description: 'DigitalOcean region'
+    default: 'medium'
+  vps-location:
+    description: 'Selectel location (e.g., spb0, msk1)'
     required: false
-    default: 'nyc1'
+    default: 'spb0'
   
-  # Mautic Packages
+  # --- Плагины и темы Mautic ---
   themes:
     description: |
       List of Mautic theme packages from Packagist or GitHub (one per line).
       
       Packagist packages:
       vendor/theme-name:^1.0
-      another-vendor/custom-theme:dev-main
-      
-      GitHub URLs (public repositories):
-      https://github.com/user/theme-repo/archive/refs/heads/main.zip
       
       GitHub URLs with custom directory and authentication:
-      https://github.com/company/private-theme/archive/main.zip?directory=MyCustomTheme&token=ghp_xxxxxxxxxxxxxxxxxxxx
-      https://github.com/vendor/premium-theme/archive/v2.1.0.zip?directory=PremiumTheme&token=ghp_yyyyyyyyyyyyyyyyyyyy
+      https://github.com/company/private-theme/archive/main.zip?directory=MyCustomTheme&token=${{ secrets.THEME_TOKEN }}
     required: false
   plugins:
     description: |
@@ -70,17 +65,12 @@ inputs:
       
       Packagist packages:
       vendor/plugin-name:^2.0
-      another-vendor/custom-plugin:^1.5
-      
-      GitHub URLs (public repositories):
-      https://github.com/user/plugin-repo/archive/refs/heads/main.zip
       
       GitHub URLs with custom directory and authentication:
-      https://github.com/company/private-plugin/archive/main.zip?directory=CompanyPlugin&token=ghp_xxxxxxxxxxxxxxxxxxxx
-      https://github.com/vendor/premium-plugin/archive/v2.1.0.zip?directory=PremiumPlugin&token=ghp_yyyyyyyyyyyyyyyyyyyy
+      https://github.com/company/private-plugin/archive/main.zip?directory=CompanyPlugin&token=${{ secrets.PLUGIN_TOKEN }}
     required: false
   
-  # Database Configuration
+  # --- Конфигурация Базы Данных ---
   mysql-database:
     description: 'MySQL database name'
     required: false
@@ -91,12 +81,10 @@ inputs:
     default: 'mautic_db_user'
   mysql-password:
     description: 'MySQL password'
-    required: false
-    default: 'mautic_db_pwd'
+    required: true # Пароль должен быть обязательным
   mysql-root-password:
     description: 'MySQL root password'
-    required: false
-    default: 'changeme'
+    required: true # Пароль должен быть обязательным
 
 outputs:
   vps-ip:
@@ -116,207 +104,40 @@ runs:
       shell: bash
       run: |
         echo "🔍 Validating required inputs..."
-        
-        if [ -z "${{ inputs.digitalocean-token }}" ]; then
-          echo "❌ Error: digitalocean-token is required"
+        if [ -z "${{ inputs.selectel-token }}" ]; then
+          echo "❌ Error: selectel-token is required"
           exit 1
         fi
-        
         if [ -z "${{ inputs.ssh-private-key }}" ]; then
           echo "❌ Error: ssh-private-key is required"
           exit 1
         fi
-        
         if [ -z "${{ inputs.email }}" ]; then
           echo "❌ Error: email is required"
           exit 1
         fi
-        
         if [ -z "${{ inputs.mautic-password }}" ]; then
           echo "❌ Error: mautic-password is required"
           exit 1
         fi
-        
-        # Validate email format
-        if ! echo "${{ inputs.email }}" | grep -E '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' > /dev/null; then
-          echo "❌ Error: Invalid email format"
+        if [ -z "${{ inputs.mysql-password }}" ]; then
+          echo "❌ Error: mysql-password is required"
           exit 1
         fi
-        
+        if [ -z "${{ inputs.mysql-root-password }}" ]; then
+          echo "❌ Error: mysql-root-password is required"
+          exit 1
+        fi
         echo "✅ All required inputs validated"
 
-    - name: Install doctl
-      uses: digitalocean/action-doctl@v2
-      with:
-        token: ${{ inputs.digitalocean-token }}
-
-    - name: Create and configure VPS
+    - name: Create and configure VPS on Selectel
       id: deploy
       shell: bash
-      run: |
-        # Debug: Show what environment variables are actually set
-        echo "🐛 DEBUG: Environment variables:"
-        echo "  INPUT_MAUTIC_VERSION='${INPUT_MAUTIC_VERSION}'"
-        echo "  mautic-version input='${{ inputs.mautic-version }}'"
-        echo ""
-        
-        # Run the main deployment script
-        ${{ github.action_path }}/scripts/deploy.sh
-        
-        # Fail-fast validation: Check if deployment outputs were created
-        echo ""
-        echo "🔍 Validating deployment..."
-        
-        # Extract VPS IP from deployment outputs immediately
-        VPS_IP=$(grep "vps-ip=" "$GITHUB_OUTPUT" | cut -d'=' -f2-)
-        
-        # Fail fast if no VPS IP found
-        if [ -z "$VPS_IP" ] && [ -z "$INPUT_DOMAIN" ]; then
-            echo "❌ FATAL: VPS IP not found in deployment outputs"
-            echo "🔍 Deployment appears to have failed - no VPS was created"
-            echo "📋 GitHub outputs content:"
-            cat "$GITHUB_OUTPUT" 2>/dev/null || echo "No GitHub outputs file found"
-            exit 1
-        fi
-        
-        # Set the URL based on domain or IP
-        if [ -n "$INPUT_DOMAIN" ]; then
-            MAUTIC_URL="https://${INPUT_DOMAIN}"
-            echo "VPS IP: ${VPS_IP}"
-            echo "Mautic URL: ${MAUTIC_URL} (using domain)"
-        else
-            MAUTIC_PORT=${INPUT_MAUTIC_PORT:-8001}
-            MAUTIC_URL="http://${VPS_IP}:${MAUTIC_PORT}"
-            echo "VPS IP: ${VPS_IP}"
-            echo "Mautic URL: ${MAUTIC_URL}"
-        fi
-        
-        # Fail fast if URL construction failed
-        if [ -z "$MAUTIC_URL" ]; then
-            echo "❌ FATAL: Could not construct Mautic URL"
-            exit 1
-        fi
-        
-        echo "⏳ Waiting for Mautic to be ready..."
-        
-        # Enhanced validation with better timeout and debugging
-        MAX_ATTEMPTS=8
-        ATTEMPT=1
-        
-        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "Attempt $ATTEMPT: Testing Mautic login page..."
-            
-            # Test the login endpoint directly - should return HTTP 200
-            LOGIN_URL="${MAUTIC_URL}/s/login"
-            
-            # Enhanced curl with better error handling
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-                --connect-timeout 15 \
-                --max-time 45 \
-                --retry 2 \
-                --retry-delay 5 \
-                --retry-connrefused \
-                "$LOGIN_URL" 2>/dev/null || echo "000")
-            
-            # If we get a redirect, let's see where it goes
-            if [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "301" ]; then
-                REDIRECT_URL=$(curl -s -I --connect-timeout 10 --max-time 30 "$LOGIN_URL" 2>/dev/null | grep -i "location:" | cut -d' ' -f2- | tr -d '\r\n')
-                echo "📋 Login page returned HTTP $HTTP_CODE, redirecting to: $REDIRECT_URL"
-                
-                # Follow the redirect to see the final response
-                if [ -n "$REDIRECT_URL" ]; then
-                    FINAL_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-                        --connect-timeout 15 \
-                        --max-time 30 \
-                        "$REDIRECT_URL" 2>/dev/null || echo "000")
-                    echo "📋 Redirect destination returned HTTP $FINAL_HTTP_CODE"
-                    
-                    # Accept 200 after redirect (successful page load)
-                    if [ "$FINAL_HTTP_CODE" = "200" ]; then
-                        echo "✅ Mautic is responding correctly (redirected to working page)"
-                        echo "🎉 Deployment validation successful!"
-                        break
-                    elif echo "$REDIRECT_URL" | grep -q "/installer"; then
-                        echo "⚠️ Mautic is redirecting to installer - installation incomplete"
-                        echo "📋 Will continue trying as installation may still be in progress"
-                    fi
-                fi
-            else
-                echo "📋 Login page returned HTTP $HTTP_CODE"
-            fi
-            
-            # Accept 200 (direct success) or 503 (temporary unavailable during startup)
-            if [ "$HTTP_CODE" = "200" ]; then
-                echo "✅ Mautic login page loaded successfully (HTTP 200)"
-                echo "🎉 Deployment validation successful!"
-                break
-            elif [ "$HTTP_CODE" = "503" ]; then
-                echo "📋 Service temporarily unavailable (HTTP 503) - Mautic may still be starting up"
-                echo "⏳ Will retry in 45 seconds..."
-            elif [ "$HTTP_CODE" = "000" ]; then
-                echo "📋 Connection failed - checking if containers and port are accessible..."
-                
-                # Enhanced debugging for connection failures
-                if [ $ATTEMPT -eq 1 ] || [ $ATTEMPT -eq 4 ]; then
-                    echo "🔍 Detailed debugging for attempt $ATTEMPT:"
-                    
-                    # Check if port is accessible from outside
-                    echo "📡 Testing port connectivity..."
-                    if [ -n "$INPUT_DOMAIN" ]; then
-                        echo "  - Testing HTTPS (443): $(nc -z -w5 ${INPUT_DOMAIN} 443 && echo 'OPEN' || echo 'CLOSED')"
-                        echo "  - Testing HTTP (80): $(nc -z -w5 ${INPUT_DOMAIN} 80 && echo 'OPEN' || echo 'CLOSED')"
-                    else
-                        MAUTIC_PORT=${INPUT_MAUTIC_PORT:-8001}
-                        echo "  - Testing Mautic port ($MAUTIC_PORT): $(nc -z -w5 ${VPS_IP} ${MAUTIC_PORT} && echo 'OPEN' || echo 'CLOSED')"
-                    fi
-                    
-                    # Check container status remotely with shorter timeout
-                    echo "📊 Remote container status check:"
-                    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/id_rsa root@${VPS_IP} "
-                        cd /var/www 2>/dev/null || cd /
-                        echo '  - Docker service:' \$(systemctl is-active docker 2>/dev/null || echo 'unknown')
-                        echo '  - Container status:'
-                        docker ps --filter 'name=mautic' --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || echo '    Could not get container status'
-                        echo '  - Recent Mautic logs:'
-                        docker logs mautic_app --tail 5 --since 60s 2>/dev/null || echo '    No recent logs available'
-                    " 2>/dev/null || echo "    Could not connect to server for debugging"
-                fi
-            else
-                echo "📋 Unexpected HTTP response: $HTTP_CODE (expected 200)"
-            fi
-            
-            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                echo "⏳ Waiting 45 seconds before retry..."
-                sleep 45
-            else
-                echo "❌ Mautic failed to respond properly after $MAX_ATTEMPTS attempts"
-                echo "� Final troubleshooting information:"
-                echo "  - VPS IP: ${VPS_IP}"
-                echo "  - Mautic URL: ${MAUTIC_URL}"
-                echo "  - Login URL: ${LOGIN_URL}"
-                echo "  - Last HTTP response: ${HTTP_CODE}"
-                
-                # Final comprehensive debugging
-                echo "� Final container debugging:"
-                ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -i ~/.ssh/id_rsa root@${VPS_IP} "
-                    cd /var/www 2>/dev/null || cd /
-                    echo 'Container status:'
-                    docker ps -a --filter 'name=mautic' 2>/dev/null || echo 'Could not get container status'
-                    echo 'Compose services:'
-                    docker compose ps 2>/dev/null || echo 'Could not get compose status'
-                    echo 'Mautic app logs (last 20 lines):'
-                    docker logs mautic_app --tail 20 2>/dev/null || echo 'No Mautic logs available'
-                    echo 'MySQL logs (last 10 lines):'
-                    docker logs mautic_mysql --tail 10 2>/dev/null || echo 'No MySQL logs available'
-                " 2>/dev/null || echo "Could not connect for final debugging"
-                
-                exit 1
-            fi
-            
-            ATTEMPT=$((ATTEMPT + 1))
-        done
+      # Указываем наш новый скрипт для Selectel
+      run: ${{ github.action_path }}/scripts/deploy_selectel.sh
       env:
-        INPUT_DIGITALOCEAN_TOKEN: ${{ inputs.digitalocean-token }}
+        # Передаем все inputs как переменные окружения в скрипт
+        INPUT_SELECTEL_TOKEN: ${{ inputs.selectel-token }}
         INPUT_SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
         INPUT_EMAIL: ${{ inputs.email }}
         INPUT_MAUTIC_PASSWORD: ${{ inputs.mautic-password }}
@@ -324,8 +145,8 @@ runs:
         INPUT_MAUTIC_PORT: ${{ inputs.mautic-port }}
         INPUT_DOMAIN: ${{ inputs.domain }}
         INPUT_VPS_NAME: ${{ inputs.vps-name }}
-        INPUT_VPS_SIZE: ${{ inputs.vps-size }}
-        INPUT_VPS_REGION: ${{ inputs.vps-region }}
+        INPUT_VPS_RPLAN: ${{ inputs.vps-rplan }}
+        INPUT_VPS_LOCATION: ${{ inputs.vps-location }}
         INPUT_THEMES: ${{ inputs.themes }}
         INPUT_PLUGINS: ${{ inputs.plugins }}
         INPUT_MYSQL_DATABASE: ${{ inputs.mysql-database }}
@@ -339,6 +160,7 @@ runs:
       if: always()
       with:
         name: mautic-deployment-log
+        # Убедимся, что путь к логу правильный, он создается в корне рабочего пространства
         path: ./setup-dc.log
 
     - name: Cleanup
@@ -346,6 +168,5 @@ runs:
       if: always()
       run: |
         echo "🧹 Cleaning up SSH keys and temporary files..."
-        rm -f ~/.ssh/id_rsa
-        rm -f ~/.ssh/id_rsa.pub
+        rm -f ~/.ssh/id_rsa ~/.ssh/id_rsa.pub
         echo "✅ Cleanup completed"

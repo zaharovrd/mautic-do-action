@@ -1,0 +1,104 @@
+version: '3.8'
+
+x-mautic-volumes:
+  &mautic-volumes
+  - mautic_data:/var/www/html
+  - mautic_config:/var/www/html/config
+  - ./logs:/var/www/html/var/logs
+  - mautic_media:/var/www/html/docroot/media/files
+  - mautic_media:/var/www/html/docroot/media/images
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: mautic_db
+    env_file:
+      - .mautic_env
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      start_period: 60s
+      interval: 30s
+      timeout: 15s
+      retries: 8
+    networks:
+      - mautic
+
+  mautic:
+    image: mautic/mautic:${MAUTIC_VERSION:-6.0.5-apache}
+    container_name: mautic_web
+    depends_on:
+      db:
+        condition: service_healthy
+    links:
+      - db:mysql
+    ports:
+      - "${PORT:-8001}:80"
+    env_file:
+      - .mautic_env
+    environment:
+      - DOCKER_MAUTIC_ROLE=mautic_web
+      - DOCKER_MAUTIC_LOAD_TEST_DATA=false
+      - DOCKER_MAUTIC_RUN_MIGRATIONS=true
+    volumes: *mautic-volumes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - mautic
+
+  # Mautic cron jobs
+  mautic_cron:
+    image: mautic/mautic:${MAUTIC_VERSION:-6.0.5-apache}
+    container_name: mautic_cron
+    depends_on:
+      mautic:
+        condition: service_healthy
+    links:
+      - db:mysql
+    env_file:
+      - .mautic_env
+    environment:
+      - DOCKER_MAUTIC_ROLE=mautic_cron
+    volumes: *mautic-volumes
+    restart: unless-stopped
+    networks:
+      - mautic
+
+  # Mautic worker for background processing (disabled by default during initial deployment)
+  mautic_worker:
+    image: mautic/mautic:${MAUTIC_VERSION:-6.0.5-apache}
+    container_name: mautic_worker
+    depends_on:
+      mautic:
+        condition: service_healthy
+    links:
+      - db:mysql
+    env_file:
+      - .mautic_env
+    environment:
+      - DOCKER_MAUTIC_ROLE=mautic_worker
+    volumes: *mautic-volumes
+    command: php /var/www/html/bin/console messenger:consume email async priority normal --limit=10 --memory-limit=512M
+    restart: unless-stopped
+    profiles:
+      - worker  # This allows us to start worker separately after installation
+    networks:
+      - mautic
+
+volumes:
+  mautic_data:
+  mautic_config:
+  mautic_media:
+  mysql_data:
+
+networks:
+  mautic:
+    driver: bridge

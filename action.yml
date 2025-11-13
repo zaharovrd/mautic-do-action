@@ -1,6 +1,6 @@
 name: 'Deploy Mautic to Selectel'
 description: 'Deploy Mautic with Docker Compose to a Selectel VPS with automated SSL and monitoring'
-author: 'MautiBox'
+author: 'escopecz'
 
 branding:
   icon: 'cloud'
@@ -48,26 +48,20 @@ inputs:
     required: false
     default: 'spb0'
   
-  # --- Плагины и темы Mautic ---
+  # --- Плагины и темы Mautic (ИЗМЕНЕНО) ---
   themes:
     description: |
-      List of Mautic theme packages from Packagist or GitHub (one per line).
-      
-      Packagist packages:
-      vendor/theme-name:^1.0
-      
-      GitHub URLs with custom directory and authentication:
-      https://github.com/company/private-theme/archive/main.zip?directory=MyCustomTheme&token=${{ secrets.THEME_TOKEN }}
+      List of Mautic theme packages (one per line).
+      Example for a private repo:
+      https://github.com/company/private-theme/archive/main.zip?directory=MyTheme&token=${{ secrets.YOUR_THEME_TOKEN }}
+      (Note: The secret itself must be passed from the workflow file)
     required: false
   plugins:
     description: |
-      List of Mautic plugin packages from Packagist or GitHub (one per line).
-      
-      Packagist packages:
-      vendor/plugin-name:^2.0
-      
-      GitHub URLs with custom directory and authentication:
-      https://github.com/company/private-plugin/archive/main.zip?directory=CompanyPlugin&token=${{ secrets.PLUGIN_TOKEN }}
+      List of Mautic plugin packages (one per line).
+      Example for a private repo:
+      https://github.com/company/private-plugin/archive/main.zip?directory=MyPlugin&token=${{ secrets.YOUR_PLUGIN_TOKEN }}
+      (Note: The secret itself must be passed from the workflow file)
     required: false
   
   # --- Конфигурация Базы Данных ---
@@ -81,10 +75,10 @@ inputs:
     default: 'mautic_db_user'
   mysql-password:
     description: 'MySQL password'
-    required: true # Пароль должен быть обязательным
+    required: true
   mysql-root-password:
     description: 'MySQL root password'
-    required: true # Пароль должен быть обязательным
+    required: true
 
 outputs:
   vps-ip:
@@ -133,10 +127,8 @@ runs:
     - name: Create and configure VPS on Selectel
       id: deploy
       shell: bash
-      # Указываем наш новый скрипт для Selectel
       run: ${{ github.action_path }}/scripts/deploy_selectel.sh
       env:
-        # Передаем все inputs как переменные окружения в скрипт
         INPUT_SELECTEL_TOKEN: ${{ inputs.selectel-token }}
         INPUT_SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
         INPUT_EMAIL: ${{ inputs.email }}
@@ -160,7 +152,6 @@ runs:
       if: always()
       with:
         name: mautic-deployment-log
-        # Убедимся, что путь к логу правильный, он создается в корне рабочего пространства
         path: ./setup-dc.log
 
     - name: Cleanup
@@ -168,5 +159,5 @@ runs:
       if: always()
       run: |
         echo "🧹 Cleaning up SSH keys and temporary files..."
-        rm -f ~/.ssh/id_rsa ~/.ssh/id_rsa.pub
+        rm -f ~/.ssh/mautic_deploy_temp_key ~/.ssh/mautic_deploy_temp_key.pub
         echo "✅ Cleanup completed"

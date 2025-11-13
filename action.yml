@@ -53,7 +53,7 @@ inputs:
     description: |
       List of Mautic theme packages (one per line).
       Example for a private repo:
-      https://github.com/company/private-theme/archive/main.zip?directory=MyTheme&token=${{ secrets.YOUR_THEME_TOKEN }}
+      https://github.com/company/private-theme/archive/main.zip?directory=MyTheme&token=YOUR_GITHUB_TOKEN
       (Note: The secret itself must be passed from the workflow file)
     required: false
 
@@ -61,7 +61,7 @@ inputs:
     description: |
       List of Mautic plugin packages (one per line).
       Example for a private repo:
-      https://github.com/company/private-plugin/archive/main.zip?directory=MyPlugin&token=${{ secrets.YOUR_PLUGIN_TOKEN }}
+      https://github.com/company/private-plugin/archive/main.zip?directory=MyPlugin&token=YOUR_GITHUB_TOKEN
       (Note: The secret itself must be passed from the workflow file)
     required: false
 

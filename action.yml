@@ -1,6 +1,6 @@
 name: 'Deploy Mautic to Selectel'
 description: 'Deploy Mautic with Docker Compose to a Selectel VPS with automated SSL and monitoring'
-author: 'escopecz'
+author: 'MautiBox'
 
 branding:
   icon: 'cloud'
@@ -48,7 +48,7 @@ inputs:
     required: false
     default: 'spb0'
   
-  # --- Плагины и темы Mautic (ИЗМЕНЕНО) ---
+  # --- Плагины и темы Mautic ---
   themes:
     description: |
       List of Mautic theme packages (one per line).
@@ -56,6 +56,7 @@ inputs:
       https://github.com/company/private-theme/archive/main.zip?directory=MyTheme&token=${{ secrets.YOUR_THEME_TOKEN }}
       (Note: The secret itself must be passed from the workflow file)
     required: false
+
   plugins:
     description: |
       List of Mautic plugin packages (one per line).
@@ -63,6 +64,7 @@ inputs:
       https://github.com/company/private-plugin/archive/main.zip?directory=MyPlugin&token=${{ secrets.YOUR_PLUGIN_TOKEN }}
       (Note: The secret itself must be passed from the workflow file)
     required: false
+
   
   # --- Конфигурация Базы Данных ---
   mysql-database:
@@ -75,10 +77,10 @@ inputs:
     default: 'mautic_db_user'
   mysql-password:
     description: 'MySQL password'
-    required: true
+    required: true # Пароль должен быть обязательным
   mysql-root-password:
     description: 'MySQL root password'
-    required: true
+    required: true # Пароль должен быть обязательным
 
 outputs:
   vps-ip:
@@ -127,8 +129,10 @@ runs:
     - name: Create and configure VPS on Selectel
       id: deploy
       shell: bash
+      # Указываем наш новый скрипт для Selectel
       run: ${{ github.action_path }}/scripts/deploy_selectel.sh
       env:
+        # Передаем все inputs как переменные окружения в скрипт
         INPUT_SELECTEL_TOKEN: ${{ inputs.selectel-token }}
         INPUT_SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
         INPUT_EMAIL: ${{ inputs.email }}
@@ -152,6 +156,7 @@ runs:
       if: always()
       with:
         name: mautic-deployment-log
+        # Убедимся, что путь к логу правильный, он создается в корне рабочего пространства
         path: ./setup-dc.log
 
     - name: Cleanup
@@ -159,5 +164,5 @@ runs:
       if: always()
       run: |
         echo "🧹 Cleaning up SSH keys and temporary files..."
-        rm -f ~/.ssh/mautic_deploy_temp_key ~/.ssh/mautic_deploy_temp_key.pub
+        rm -f ~/.ssh/id_rsa ~/.ssh/id_rsa.pub
         echo "✅ Cleanup completed"

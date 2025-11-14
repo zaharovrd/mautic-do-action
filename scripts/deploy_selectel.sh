@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-#      MAUTIC DEPLOYMENT SCRIPT FOR SELECTEL (REVISED V3 - FINAL)
+#      MAUTIC DEPLOYMENT SCRIPT FOR SELECTEL (REVISED V4 - FINAL FIX)
 # ==============================================================================
 
 # Включаем строгий режим и отладку для максимальной информативности
@@ -12,12 +12,15 @@ echo "Mautic version to deploy/update: ${INPUT_MAUTIC_VERSION}"
 SELECTEL_API_URL="https://api.vscale.io/v1"
 SELECTEL_TOKEN="${INPUT_SELECTEL_TOKEN}"
 
-if [ -n "$CURL_CACERT_PATH" ]; then
+# ======================== ИСПРАВЛЕНИЕ ЗДЕСЬ ========================
+# Используем ${VAR:-} для безопасной проверки необъявленной переменной в режиме set -u
+if [ -n "${CURL_CACERT_PATH:-}" ]; then
     echo " M   Using custom CA certificate at: ${CURL_CACERT_PATH}"
     CURL_OPTIONS="--cacert ${CURL_CACERT_PATH}"
 else
     CURL_OPTIONS=""
 fi
+# ====================================================================
 
 if [ -z "${SELECTEL_TOKEN}" ]; then echo "❌ FATAL ERROR: Selectel API token is not set."; exit 1; fi
 
@@ -68,7 +71,7 @@ if [ -z "$SERVER_EXISTS_CTID" ] || [ "$SERVER_EXISTS_CTID" == "null" ]; then
     IMAGE_ID="ubuntu_22.04_64_001_master"
     echo "🔧 Using image ID: ${IMAGE_ID}"
     CREATE_SERVER_PAYLOAD=$(jq -n --arg make_from "$IMAGE_ID" --arg rplan "${INPUT_VPS_RPLAN}" --arg name "${INPUT_VPS_NAME}" --argjson keys "[$SSH_KEY_ID]" --arg location "${INPUT_VPS_LOCATION}" '{make_from: $make_from, rplan: $rplan, do_start: true, name: $name, keys: $keys, location: $location}')
-    CREATED_SERVER_JSON=$(curl -s $CURL_OPTIONS -X POST "${SELECTEL_API_URL}/scalets" -H "Content-Type: application/json" -H "X-Token: ${SELECTEL_TOKEN}" -d "${CREATE_SERVER_PAYLOAD}")
+    CREATED_SERVER_JSON=$(curl -s $CURL_OPTIONS -X POST "${SELECTEL_API_URL}/scalets" -H "Content-Type: application/json" -H "X-Token: ${SELECTEL_TOKEN}" -d "${CREATED_SERVER_PAYLOAD}")
     SERVER_CTID=$(echo "${CREATED_SERVER_JSON}" | jq -r '.ctid')
     if [ -z "$SERVER_CTID" ] || [ "$SERVER_CTID" == "null" ]; then echo "❌ Error: Failed to create VPS. Response: ${CREATED_SERVER_JSON}"; exit 1; fi
     echo "✅ VPS creation initiated (CTID: ${SERVER_CTID})."
@@ -125,8 +128,6 @@ if [ -n "$INPUT_DOMAIN" ]; then
 fi
 
 echo "📋 Creating deployment config..."
-# ======================== ИСПРАВЛЕНИЕ ЗДЕСЬ ========================
-# Убедимся, что INPUT_MAUTIC_VERSION корректно передается в .env файл
 cat > deploy.env << EOF
 EMAIL_ADDRESS=${INPUT_EMAIL}
 MAUTIC_PASSWORD=${INPUT_MAUTIC_PASSWORD}
@@ -140,7 +141,6 @@ MYSQL_USER=${INPUT_MYSQL_USER}
 MYSQL_PASSWORD=${INPUT_MYSQL_PASSWORD}
 MYSQL_ROOT_PASSWORD=${INPUT_MYSQL_ROOT_PASSWORD}
 EOF
-# ====================================================================
 if [ -n "$INPUT_DOMAIN" ]; then echo "DOMAIN_NAME=${INPUT_DOMAIN}" >> deploy.env; fi
 chmod 600 deploy.env
 
@@ -163,7 +163,7 @@ echo "⚙️  Running setup on server..."
 ssh -f -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes -i "${TEMP_SSH_KEY_PATH}" root@${VPS_IP} "cd /var/www && nohup ./setup > /var/log/setup-dc.log 2>&1"
 
 echo "⏳ Waiting a moment for the remote process to initialize..."
-sleep 5
+sleep 10
 
 echo "📊 Monitoring setup progress..."
 SSH_COMMAND_TO_MONITOR="

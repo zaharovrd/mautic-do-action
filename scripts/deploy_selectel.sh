@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-#      MAUTIC DEPLOYMENT SCRIPT - ФИНАЛЬНАЯ ПРОДАКТ-ВЕРСИЯ
+#      MAUTIC DEPLOYMENT SCRIPT - ФИНАЛЬНАЯ ПРОДАКТ-ВЕРСИЯ V2
 # ==============================================================================
 
 set -e
@@ -8,11 +8,20 @@ set -e
 echo "🚀 Starting deployment to Selectel..."
 SELECTEL_API_URL="https://api.vscale.io/v1"
 SELECTEL_TOKEN="${INPUT_SELECTEL_TOKEN}"
-if [ -n "$CURL_CACERT_PATH" ]; then echo " M   Using custom CA certificate at: ${CURL_CACERT_PATH}"; CURL_OPTIONS="--cacert ${CURL_CACERT_PATH}"; else CURL_OPTIONS=""; fi
+
+if [ -n "$CURL_CACERT_PATH" ]; then
+    echo " M   Using custom CA certificate at: ${CURL_CACERT_PATH}"
+    CURL_OPTIONS="--cacert ${CURL_CACERT_PATH}"
+else
+    CURL_OPTIONS=""
+fi
+
 if [ -z "${SELECTEL_TOKEN}" ]; then echo "❌ FATAL ERROR: Selectel API token is not set."; exit 1; fi
+
 TEMP_SSH_KEY_PATH=~/.ssh/mautic_deploy_temp_key
-cleanup() { echo "🧹 Cleaning up temporary SSH key..."; rm -f "${TEMP_SSH_KEY_PATH}" "${TEMP_SSH_KEY_PATH}.pub"; }
+cleanup() { echo "🧹 Cleaning up temporary SSH key..."; rm -f "${TEMP_SSH_KEY_PATH}" "${TEMP_SSH_KEY_PATH}".pub"; }
 trap cleanup EXIT
+
 MAUTIC_PORT=${INPUT_MAUTIC_PORT:-8001}
 echo "📝 Configuration..."
 echo "🔐 Setting up SSH authentication..."
@@ -20,33 +29,50 @@ mkdir -p ~/.ssh
 echo "${INPUT_SSH_PRIVATE_KEY}" > "${TEMP_SSH_KEY_PATH}"
 chmod 600 "${TEMP_SSH_KEY_PATH}"
 echo "🔑 Generating public key..."
-if ! ssh-keygen -y -f "${TEMP_SSH_KEY_PATH}" > "${TEMP_SSH_KEY_PATH}.pub" 2>/dev/null; then echo "❌ Error: Failed to generate public key"; exit 1; fi
+if ! ssh-keygen -y -f "${TEMP_SSH_KEY_PATH}" > "${TEMP_SSH_KEY_PATH}".pub" 2>/dev/null; then echo "❌ Error: Failed to generate public key"; exit 1; fi
 SSH_PUBLIC_KEY_CONTENT=$(cat "${TEMP_SSH_KEY_PATH}.pub")
 KEY_NAME="mautic-deploy-key-$(date +%s)"
+
 echo "🔍 Finding or creating SSH key in Selectel account..."
 ALL_KEYS_JSON=$(curl -s $CURL_OPTIONS -X GET "${SELECTEL_API_URL}/sshkeys" -H "X-Token: ${SELECTEL_TOKEN}")
 if [ -z "${ALL_KEYS_JSON}" ]; then echo "❌ FATAL ERROR: Received an empty response from Selectel API."; exit 1; fi
 if echo "${ALL_KEYS_JSON}" | jq -e 'type == "object" and has("error_message")' > /dev/null; then echo "❌ FATAL API ERROR: $(echo "${ALL_KEYS_JSON}" | jq -r '.error_message')"; exit 1; fi
+
 SSH_KEY_ID=$(echo "${ALL_KEYS_JSON}" | jq -r --arg key "${SSH_PUBLIC_KEY_CONTENT}" '.[] | select(.key == $key) | .id')
+
 if [ -z "$SSH_KEY_ID" ] || [ "$SSH_KEY_ID" == "null" ]; then
     echo "🔑 Key not found. Adding new key..."
     ADD_KEY_PAYLOAD=$(jq -n --arg name "$KEY_NAME" --arg key "$SSH_PUBLIC_KEY_CONTENT" '{name: $name, key: $key}')
-    NEW_KEY_JSON=$(curl -s $CURL_OPTIONS -X POST "${SELECTEL_API_URL}/sshkeys" -H "Content-Type: application/json" -H "X-Token: ${SELECTEL_TOKEN}" -d "${ADD_KEY_PAYLOAD}")
+    
+    # ИСПРАВЛЕНИЕ 1: Используем pipe для передачи JSON
+    NEW_KEY_JSON=$(echo "${ADD_KEY_PAYLOAD}" | curl -s $CURL_OPTIONS -X POST "${SELECTEL_API_URL}/sshkeys" \
+        -H "Content-Type: application/json;charset=UTF-8" \
+        -H "X-Token: ${SELECTEL_TOKEN}" \
+        --data @-)
+        
     SSH_KEY_ID=$(echo "${NEW_KEY_JSON}" | jq -r '.id')
     if [ -z "$SSH_KEY_ID" ] || [ "$SSH_KEY_ID" == "null" ]; then echo "❌ Error: Failed to add SSH key. Response: ${NEW_KEY_JSON}"; exit 1; fi
     echo "✅ New SSH key added (ID: ${SSH_KEY_ID})"
 else
     echo "✅ Found existing SSH key in Selectel (ID: ${SSH_KEY_ID})"
 fi
+
 echo "🖥️  Checking if VPS '${INPUT_VPS_NAME}' exists..."
 ALL_SERVERS_JSON=$(curl -s $CURL_OPTIONS -X GET "${SELECTEL_API_URL}/scalets" -H "X-Token: ${SELECTEL_TOKEN}")
 SERVER_EXISTS_CTID=$(echo "${ALL_SERVERS_JSON}" | jq -r --arg name "${INPUT_VPS_NAME}" '.[] | select(.name == $name) | .ctid')
+
 if [ -z "$SERVER_EXISTS_CTID" ] || [ "$SERVER_EXISTS_CTID" == "null" ]; then
     echo "📦 Creating new VPS '${INPUT_VPS_NAME}'..."
     IMAGE_ID="ubuntu_22.04_64_001_master"
     echo "🔧 Using image ID: ${IMAGE_ID}"
     CREATE_SERVER_PAYLOAD=$(jq -n --arg make_from "$IMAGE_ID" --arg rplan "${INPUT_VPS_RPLAN}" --arg name "${INPUT_VPS_NAME}" --argjson keys "[$SSH_KEY_ID]" --arg location "${INPUT_VPS_LOCATION}" '{make_from: $make_from, rplan: $rplan, do_start: true, name: $name, keys: $keys, location: $location}')
-    CREATED_SERVER_JSON=$(curl -s $CURL_OPTIONS -X POST "${SELECTEL_API_URL}/scalets" -H "Content-Type: application/json" -H "X-Token: ${SELECTEL_TOKEN}" -d "${CREATED_SERVER_PAYLOAD}")
+    
+    # ИСПРАВЛЕНИЕ 2: Используем pipe для передачи JSON
+    CREATED_SERVER_JSON=$(echo "${CREATE_SERVER_PAYLOAD}" | curl -s $CURL_OPTIONS -X POST "${SELECTEL_API_URL}/scalets" \
+        -H "Content-Type: application/json;charset=UTF-8" \
+        -H "X-Token: ${SELECTEL_TOKEN}" \
+        --data @-)
+
     SERVER_CTID=$(echo "${CREATED_SERVER_JSON}" | jq -r '.ctid')
     if [ -z "$SERVER_CTID" ] || [ "$SERVER_CTID" == "null" ]; then echo "❌ Error: Failed to create VPS. Response: ${CREATED_SERVER_JSON}"; exit 1; fi
     echo "✅ VPS creation initiated (CTID: ${SERVER_CTID})."
@@ -54,6 +80,8 @@ else
     echo "✅ VPS '${INPUT_VPS_NAME}' already exists (CTID: ${SERVER_EXISTS_CTID})"
     SERVER_CTID=$SERVER_EXISTS_CTID
 fi
+
+# ... (Остальная часть скрипта остается без изменений, она уже работает) ...
 echo "🔍 Getting VPS IP address..."
 VPS_IP=""
 TIMEOUT=300; COUNTER=0

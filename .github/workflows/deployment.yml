@@ -14,6 +14,10 @@ on:
       domain:
         description: 'Домен для Mautic (оставить пустым для IP-адреса)'
         required: false
+      mautic_version:
+        description: 'Версия Docker-образа Mautic'
+        required: true
+        default: '6.0.5-apache'
 
 jobs:
   deploy:
@@ -37,6 +41,7 @@ jobs:
           # --- Параметры Mautic (из workflow inputs) ---
           email: ${{ github.event.inputs.email }}
           domain: ${{ github.event.inputs.domain }}
+          mautic-version: ${{ github.event.inputs.mautic_version }}
 
           # --- Пароли из секретов ---
           mautic-password: ${{ secrets.MAUTIC_PASSWORD }}

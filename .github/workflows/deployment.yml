@@ -50,6 +50,6 @@ jobs:
 
       - name: Show deployment results
         run: |
-          echo "🎉 Deployment completed!"
+          echo "🎉 Deployment/Update completed!"
           echo "VPS IP: ${{ steps.deploy.outputs.vps-ip }}"
           echo "Mautic URL: ${{ steps.deploy.outputs.mautic-url }}"

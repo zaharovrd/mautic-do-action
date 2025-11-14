@@ -39,9 +39,9 @@ jobs:
           domain: ${{ github.event.inputs.domain }}
 
           # --- Пароли из секретов ---
-          mautic-password: ${{ secrets.MAUTIC_PASSWORD_DEFAULT }}
-          mysql-password: ${{ secrets.MYSQL_PASSWORD_DEFAULT }}
-          mysql-root-password: ${{ secrets.MYSQL_ROOT_PASSWORD_DEFAULT }}
+          mautic-password: ${{ secrets.MAUTIC_PASSWORD }}
+          mysql-password: ${{ secrets.MYSQL_PASSWORD }}
+          mysql-root-password: ${{ secrets.MYSQL_ROOT_PASSWORD }}
 
       - name: Show deployment results
         run: |

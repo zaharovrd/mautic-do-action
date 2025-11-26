@@ -7,7 +7,7 @@ branding:
   color: 'blue'
 
 inputs:
-  # --- Конфигурация Selectel ---
+  # --- Selectel configuration---
   selectel-token:
     description: 'Selectel API access token (X-Token)'
     required: true
@@ -51,18 +51,35 @@ inputs:
   # --- Плагины и темы Mautic ---
   themes:
     description: |
-      List of Mautic theme packages (one per line).
-      Example for a private repo:
-      https://github.com/company/private-theme/archive/main.zip?directory=MyTheme&token=YOUR_GITHUB_TOKEN
-      (Note: The secret itself must be passed from the workflow file)
+      List of Mautic theme packages from Packagist or GitHub (one per line).
+      
+      Packagist packages:
+      vendor/theme-name:^1.0
+      another-vendor/custom-theme:dev-main
+      
+      GitHub URLs (public repositories):
+      https://github.com/user/theme-repo/archive/refs/heads/main.zip
+      
+      GitHub URLs with custom directory and authentication:
+      https://github.com/company/private-theme/archive/main.zip?directory=MyCustomTheme&token=ghp_xxxxxxxxxxxxxxxxxxxx
+      https://github.com/vendor/premium-theme/archive/v2.1.0.zip?directory=PremiumTheme&token=ghp_yyyyyyyyyyyyyyyyyyyy
     required: false
 
   plugins:
     description: |
-      List of Mautic plugin packages (one per line).
-      Example for a private repo:
-      https://github.com/company/private-plugin/archive/main.zip?directory=MyPlugin&token=YOUR_GITHUB_TOKEN
-      (Note: The secret itself must be passed from the workflow file)
+      List of Mautic plugin packages from Packagist or GitHub (one per line).
+      
+      Packagist packages:
+      vendor/plugin-name:^2.0
+      another-vendor/custom-plugin:^1.5
+      
+      GitHub URLs (public repositories):
+      https://github.com/user/plugin-repo/archive/refs/heads/main.zip
+      
+      GitHub URLs with custom directory and authentication:
+      https://github.com/company/private-plugin/archive/main.zip?directory=CompanyPlugin&token=ghp_xxxxxxxxxxxxxxxxxxxx
+      https://github.com/vendor/premium-plugin/archive/v2.1.0.zip?directory=PremiumPlugin&token=ghp_yyyyyyyyyyyyyyyyyyyy
+      
     required: false
 
   
@@ -77,10 +94,10 @@ inputs:
     default: 'mautic_db_user'
   mysql-password:
     description: 'MySQL password'
-    required: true # Пароль должен быть обязательным
+    required: true
   mysql-root-password:
     description: 'MySQL root password'
-    required: true # Пароль должен быть обязательным
+    required: true
 
 outputs:
   vps-ip:

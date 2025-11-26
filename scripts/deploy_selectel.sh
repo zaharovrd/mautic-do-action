@@ -1,18 +1,23 @@
 #!/bin/bash
 # ==============================================================================
-#      MAUTIC DEPLOYMENT SCRIPT FOR SELECTEL (REVISED V2)
+#      MAUTIC DEPLOYMENT SCRIPT FOR SELECTEL (VSCALE.IO API)
+#
+# Этот скрипт выполняет следующие действия:
+# 1. Работает с API Selectel для создания/поиска SSH-ключа.
+# 2. Создает сервер (scalet), если он не существует.
+# 3. Ожидает запуска сервера и получает его IP-адрес.
+# 4. Выполняет первичную настройку сервера (аналог user-data).
+# 5. Компилирует Deno-скрипт и копирует все необходимые файлы на сервер.
+# 6. Запускает на сервере скрипт установки Mautic с Docker Compose.
+# 7. Мониторит процесс установки и выводит результат.
 # ==============================================================================
 
-# Включаем режим отладки, чтобы видеть каждую выполняемую команду
-
-set -ex
+set -e
 
 echo "🚀 Starting deployment to Selectel..."
 echo "Mautic version to deploy/update: ${INPUT_MAUTIC_VERSION}"
 SELECTEL_API_URL="https://api.vscale.io/v1"
 SELECTEL_TOKEN="${INPUT_SELECTEL_TOKEN}"
-
-# ... (весь код до компиляции Deno остается таким же) ...
 
 if [ -n "$CURL_CACERT_PATH" ]; then
     echo " M   Using custom CA certificate at: ${CURL_CACERT_PATH}"
@@ -156,20 +161,14 @@ scp -o StrictHostKeyChecking=no -i "${TEMP_SSH_KEY_PATH}" build/setup root@${VPS
 ssh -o StrictHostKeyChecking=no -i "${TEMP_SSH_KEY_PATH}" root@${VPS_IP} "cd /var/www && chmod +x setup"
 
 echo "⚙️  Running setup on server..."
-# ======================== REVISED LAUNCH COMMAND ========================
-# Используем флаг -f, чтобы ssh-клиент сам корректно ушел в фон.
-# Это самый надежный способ запускать удаленные фоновые процессы.
 ssh -f -o StrictHostKeyChecking=no \
    -o ExitOnForwardFailure=yes \
    -i "${TEMP_SSH_KEY_PATH}" \
    root@${VPS_IP} \
    "cd /var/www && nohup ./setup > /var/log/setup-dc.log 2>&1"
 
-# Добавим небольшую паузу, чтобы сервер точно успел запустить процесс
 echo "⏳ Waiting a moment for the remote process to initialize..."
 sleep 10
-# =========================================================================
-
 
 echo "📊 Monitoring setup progress..."
 SSH_COMMAND_TO_MONITOR="

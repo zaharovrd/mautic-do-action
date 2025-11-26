@@ -69,6 +69,7 @@ echo "🖥️  Checking if VPS '${INPUT_VPS_NAME}' exists..."
 ALL_SERVERS_JSON=$(curl -s $CURL_OPTIONS -X GET "${SELECTEL_API_URL}/scalets" -H "X-Token: ${SELECTEL_TOKEN}")
 SERVER_EXISTS_CTID=$(echo "${ALL_SERVERS_JSON}" | jq -r --arg name "${INPUT_VPS_NAME}" '.[] | select(.name == $name) | .ctid')
 
+IS_UPDATE="false"
 if [ -z "$SERVER_EXISTS_CTID" ] || [ "$SERVER_EXISTS_CTID" == "null" ]; then
     echo "📦 Creating new VPS '${INPUT_VPS_NAME}'..."
     
@@ -81,8 +82,9 @@ if [ -z "$SERVER_EXISTS_CTID" ] || [ "$SERVER_EXISTS_CTID" == "null" ]; then
     if [ -z "$SERVER_CTID" ] || [ "$SERVER_CTID" == "null" ]; then echo "❌ Error: Failed to create VPS. Response: ${CREATED_SERVER_JSON}"; exit 1; fi
     echo "✅ VPS creation initiated (CTID: ${SERVER_CTID})."
 else
-    echo "✅ VPS '${INPUT_VPS_NAME}' already exists (CTID: ${SERVER_EXISTS_CTID})"
+    echo "✅ VPS '${INPUT_VPS_NAME}' already exists (CTID: ${SERVER_EXISTS_CTID}). Treating as an update."
     SERVER_CTID=$SERVER_EXISTS_CTID
+    IS_UPDATE="true"
 fi
 
 echo "🔍 Getting VPS IP address..."
@@ -101,7 +103,8 @@ while [ -z "$VPS_IP" ]; do
     COUNTER=$((COUNTER + 10))
 done
 
-echo "🔧 Running initial server setup..."
+if [ "$IS_UPDATE" == "false" ]; then
+echo "🔧 Running initial server setup for a new server..."
 echo "🔐 Waiting for SSH key-based authentication to be ready..."
 SSH_TIMEOUT=300; SSH_COUNTER=0
 while ! ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes -i "${TEMP_SSH_KEY_PATH}" root@${VPS_IP} "echo 'SSH connection successful'" 2>/dev/null; do
@@ -117,6 +120,10 @@ echo "✅ SSH key authentication is available"
 
 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -i "${TEMP_SSH_KEY_PATH}" root@${VPS_IP} 'bash -s' < "${ACTION_PATH}/scripts/setup-vps.sh"
 echo "✅ Initial server setup complete."
+else
+    echo "🔄 Skipping initial server setup for existing VPS."
+fi
+
 
 if [ -n "$INPUT_DOMAIN" ]; then
     echo "🌐 Verifying domain..."

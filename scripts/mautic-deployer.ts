@@ -849,7 +849,7 @@ PORT=${this.config.port}
       let extractResult;
       if (directory) {
         // For GitHub API zipballs, we need to handle the nested directory structure
-        if (cleanUrl.includes('api.github.com')) {
+        if (cleanUrl.includes('github.com')) {
           // GitHub API creates a zip with a subdirectory named after the commit
           Logger.log(`🔍 Extracting GitHub API zipball to ${directory}...`, '🔍');
 

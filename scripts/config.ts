@@ -1,5 +1,6 @@
 /**
  * Configuration loading and validation
+ * scripts/config.ts
  */
 
 import type { DeploymentConfig } from './types.ts';
@@ -8,7 +9,7 @@ export async function loadDeploymentConfig(): Promise<DeploymentConfig> {
   try {
     const envContent = await Deno.readTextFile('deploy.env');
     const config: any = {};
-    
+
     for (const line of envContent.split('\n')) {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
@@ -18,19 +19,19 @@ export async function loadDeploymentConfig(): Promise<DeploymentConfig> {
         }
       }
     }
-    
+
     // Validate required fields
     const required = [
       'EMAIL_ADDRESS', 'MAUTIC_PASSWORD', 'IP_ADDRESS', 'PORT', 'MAUTIC_VERSION',
       'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD', 'MYSQL_ROOT_PASSWORD'
     ];
-    
+
     for (const field of required) {
       if (!config[field]) {
         throw new Error(`Required variable ${field} is not set`);
       }
     }
-    
+
     return {
       emailAddress: config.EMAIL_ADDRESS,
       mauticPassword: config.MAUTIC_PASSWORD,

@@ -1,7 +1,7 @@
+# templates/docker-compose.yml
 version: '3.8'
 
-x-mautic-volumes:
-  &mautic-volumes
+x-mautic-volumes: &mautic-volumes
   - mautic_data:/var/www/html
   - mautic_config:/var/www/html/config
   - ./logs:/var/www/html/var/logs
@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
     command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "--silent" ]
       start_period: 60s
       interval: 30s
       timeout: 15s
@@ -46,7 +46,7 @@ services:
     volumes: *mautic-volumes
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
+      test: [ "CMD", "curl", "-f", "http://localhost" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -89,7 +89,7 @@ services:
     command: php /var/www/html/bin/console messenger:consume email async priority normal --limit=10 --memory-limit=512M
     restart: unless-stopped
     profiles:
-      - worker  # This allows us to start worker separately after installation
+      - worker # This allows us to start worker separately after installation
     networks:
       - mautic
 
@@ -98,6 +98,7 @@ volumes:
   mautic_config:
   mautic_media:
   mysql_data:
+
 
 networks:
   mautic:

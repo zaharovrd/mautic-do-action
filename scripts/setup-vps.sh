@@ -1,3 +1,4 @@
+# scripts/setup-vps.sh
 #!/bin/bash
 # ==============================================================================
 #      VPS PREPARATION SCRIPT

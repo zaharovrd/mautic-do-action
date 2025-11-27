@@ -1,3 +1,4 @@
+# export_varios.sh
 # Подставьте свои реальные значения!
 export INPUT_SELECTEL_TOKEN="8d4450a0250296b942552205ec95bf67fe3e7ad5a4a49d72e8b2522d4f94f54c"
 export INPUT_SSH_PRIVATE_KEY="$(cat ~/.ssh/mautic_test_key)"

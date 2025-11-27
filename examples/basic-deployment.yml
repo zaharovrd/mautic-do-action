@@ -1,3 +1,4 @@
+# examples/basic-deployment.yml
 name: Deploy Mautic to DigitalOcean
 
 on:

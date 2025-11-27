@@ -1,3 +1,4 @@
+# examples/advanced-deployment.yml
 name: Advanced Mautic Deployment
 
 on:

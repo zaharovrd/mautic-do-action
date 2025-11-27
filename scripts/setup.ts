@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-all
 
 /**
+ * scripts/setup.ts
  * Main Mautic Docker Compose Setup Script
  * 
  * This is the entry point that orchestrates the entire deployment process

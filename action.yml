@@ -1,3 +1,4 @@
+# action.yml
 name: 'Deploy Mautic to Selectel'
 description: 'Deploy Mautic with Docker Compose to a Selectel VPS with automated SSL and monitoring'
 author: 'MautiBox'

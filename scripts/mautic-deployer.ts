@@ -1,4 +1,5 @@
 /**
+ * scripts/mautic-deployer.ts
  * Main Mautic deployment logic
  */
 
@@ -9,11 +10,11 @@ import { DockerManager } from './docker-manager.ts';
 
 export class MauticDeployer {
   private config: DeploymentConfig;
-  
+
   constructor(config: DeploymentConfig) {
     this.config = config;
   }
-  
+
   async isInstalled(): Promise<boolean> {
     // Check multiple indicators for installation
     const checks = [
@@ -22,16 +23,16 @@ export class MauticDeployer {
       this.checkDatabase(),
       this.checkConfigFiles()
     ];
-    
+
     const results = await Promise.all(checks);
     const passedChecks = results.filter(Boolean).length;
-    
+
     Logger.log(`Installation checks: ${passedChecks}/4 passed`, '📊');
-    
+
     // Consider installed if at least 3 checks pass
     return passedChecks >= 3;
   }
-  
+
   private async checkDockerCompose(): Promise<boolean> {
     const result = await ProcessManager.runShell('test -f docker-compose.yml', { ignoreError: true });
     if (result.success) {
@@ -42,7 +43,7 @@ export class MauticDeployer {
       return false;
     }
   }
-  
+
   private async checkMauticDirectories(): Promise<boolean> {
     const result = await ProcessManager.runShell('test -d mautic_data && test -d mysql_data', { ignoreError: true });
     if (result.success) {
@@ -53,11 +54,11 @@ export class MauticDeployer {
       return false;
     }
   }
-  
+
   private async checkDatabase(): Promise<boolean> {
     const containers = await DockerManager.listMauticContainers();
     const dbContainer = containers.find(c => c.name === 'mautic_db');
-    
+
     if (dbContainer && dbContainer.status === 'running') {
       Logger.success('✓ Database container is running');
       return true;
@@ -66,7 +67,7 @@ export class MauticDeployer {
       return false;
     }
   }
-  
+
   private async checkConfigFiles(): Promise<boolean> {
     const result = await ProcessManager.runShell('test -f .mautic_env', { ignoreError: true });
     if (result.success) {
@@ -77,84 +78,84 @@ export class MauticDeployer {
       return false;
     }
   }
-  
+
   async needsUpdate(): Promise<boolean> {
     const currentVersion = await DockerManager.getCurrentMauticVersion();
     const targetVersion = this.config.mauticVersion;
-    
+
     if (!currentVersion) {
       Logger.log('No current version found, update needed', '🔄');
       return true;
     }
-    
+
     if (currentVersion !== targetVersion) {
       Logger.log(`Version mismatch: current=${currentVersion}, target=${targetVersion}`, '🔄');
       return true;
     }
-    
+
     Logger.success(`Version up to date: ${currentVersion}`);
     return false;
   }
-  
+
   async performUpdate(): Promise<boolean> {
     Logger.log('Performing Mautic update...', '🔄');
-    
+
     try {
       // Pull new image - handle version that may already include -apache suffix
-      const baseVersion = this.config.mauticVersion.endsWith('-apache') 
-        ? this.config.mauticVersion 
+      const baseVersion = this.config.mauticVersion.endsWith('-apache')
+        ? this.config.mauticVersion
         : `${this.config.mauticVersion}-apache`;
       const imageName = `mautic/mautic:${baseVersion}`;
       const pullSuccess = await DockerManager.pullImage(imageName);
-      
+
       if (!pullSuccess) {
         throw new Error('Failed to pull new Mautic image');
       }
-      
+
       // Update docker-compose.yml with new version
       await this.updateDockerComposeVersion();
-      
+
       // Recreate containers with new image
       const recreateSuccess = await DockerManager.recreateContainers();
-      
+
       if (!recreateSuccess) {
         throw new Error('Failed to recreate containers');
       }
-      
+
       // Wait for containers to be healthy
       const healthyWeb = await DockerManager.waitForHealthy('mautic_web');
       const healthyDb = await DockerManager.waitForHealthy('mautic_db');
-      
+
       if (!healthyWeb || !healthyDb) {
         throw new Error('Containers failed to become healthy after update');
       }
-      
+
       // Clear cache after update
       await this.clearCache('after update');
-      
+
       Logger.success('Mautic update completed successfully');
       return true;
-      
+
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Logger.error(`Update failed: ${errorMessage}`);
       return false;
     }
   }
-  
+
   private async updateDockerComposeVersion(): Promise<void> {
     Logger.log('Updating docker-compose.yml with new version...', '📝');
-    
+
     try {
       const composeContent = await Deno.readTextFile('docker-compose.yml');
-      const baseVersion = this.config.mauticVersion.endsWith('-apache') 
-        ? this.config.mauticVersion 
+      const baseVersion = this.config.mauticVersion.endsWith('-apache')
+        ? this.config.mauticVersion
         : `${this.config.mauticVersion}-apache`;
       const updatedContent = composeContent.replace(
         /mautic\/mautic:[^-]+-apache/g,
         `mautic/mautic:${baseVersion}`
       );
-      
+
       await Deno.writeTextFile('docker-compose.yml', updatedContent);
       Logger.success('docker-compose.yml updated');
     } catch (error: unknown) {
@@ -162,25 +163,25 @@ export class MauticDeployer {
       throw new Error(`Failed to update docker-compose.yml: ${errorMessage}`);
     }
   }
-  
+
   async performInstallation(): Promise<boolean> {
     Logger.log('Performing fresh Mautic installation...', '🚀');
-    
+
     try {
       // Create data directories
       await ProcessManager.runShell('mkdir -p mautic_data mysql_data logs');
       await ProcessManager.runShell('chmod 755 mautic_data mysql_data logs');
-      
+
       // Generate environment file
       await this.createEnvironmentFile();
-      
+
       // Debug: Verify environment file was created correctly
       Logger.log('Verifying environment file creation...', '🔍');
       const envCheckResult = await ProcessManager.runShell('ls -la .mautic_env', { ignoreError: true });
       if (envCheckResult.success) {
         Logger.log('Environment file exists:', '✅');
         Logger.log(envCheckResult.output, '📋');
-        
+
         // Check the content (but mask sensitive values)
         const envContentResult = await ProcessManager.runShell('head -10 .mautic_env | sed "s/=.*/=***MASKED***/"', { ignoreError: true });
         if (envContentResult.success) {
@@ -191,13 +192,13 @@ export class MauticDeployer {
         Logger.error('Environment file was not created!');
         Logger.log(envCheckResult.output, '❌');
       }
-      
+
       // Create docker-compose.yml from template
       await this.createDockerCompose();
-      
+
       // Start containers
       const startSuccess = await DockerManager.recreateContainers();
-      
+
       if (!startSuccess) {
         // Debug: Check what docker-compose.yml looks like when it fails
         Logger.log('Container startup failed - checking docker-compose.yml content...', '🔍');
@@ -206,7 +207,7 @@ export class MauticDeployer {
           Logger.log('docker-compose.yml content (first 50 lines):', '📄');
           Logger.log(composeResult.output, '📋');
         }
-        
+
         // Check what containers exist
         Logger.log('Checking Docker container status after failure...', '🐳');
         const containerResult = await ProcessManager.runShell('docker ps -a', { ignoreError: true });
@@ -214,76 +215,76 @@ export class MauticDeployer {
           Logger.log('All Docker containers after failure:', '📋');
           Logger.log(containerResult.output, '📋');
         }
-        
+
         throw new Error('Failed to start containers');
       }
-      
+
       Logger.log('Containers started, checking initial status...', '📊');
-      
+
       // Quick container status check
       const initialContainers = await DockerManager.listMauticContainers();
       for (const container of initialContainers) {
         Logger.log(`Container ${container.name}: ${container.status} (${container.image})`, '📦');
       }
-      
+
       // Immediate MySQL debugging - check right after startup
       Logger.log('Checking MySQL container immediately after startup...', '🔍');
       await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-      
+
       const mysqlLogs = await ProcessManager.runShell('docker logs mautic_db --tail 20', { ignoreError: true });
       if (mysqlLogs.success) {
         Logger.log('MySQL startup logs:', '📋');
         Logger.log(mysqlLogs.output, '📄');
       }
-      
+
       // Wait for services to be ready
       Logger.log('Waiting for database to be healthy (up to 3 minutes)...', '🗄️');
       await DockerManager.waitForHealthy('mautic_db', 180);
-      
+
       Logger.log('Waiting for Mautic web container to be healthy (up to 5 minutes)...', '🌐');
       await DockerManager.waitForHealthy('mautic_web', 300);
-      
+
       // Run Mautic installation inside the container
       await this.runMauticInstallation();
-      
+
       // Clear cache after installation
       await this.clearCache('after installation');
-      
+
       // Fix media .htaccess files if they have incorrect configuration
       await this.fixMediaHtaccess();
-      
+
       // Install themes and plugins if specified
       if (this.config.mauticThemes || this.config.mauticPlugins) {
         Logger.log('=== STARTING THEMES AND PLUGINS INSTALLATION ===', '🎯');
         Logger.log(`Themes configured: ${this.config.mauticThemes ? 'YES' : 'NO'}`, '🎨');
         Logger.log(`Plugins configured: ${this.config.mauticPlugins ? 'YES' : 'NO'}`, '🔌');
-        
+
         if (this.config.mauticPlugins) {
           Logger.log(`Plugin URLs: ${this.config.mauticPlugins}`, '📋');
         }
-        
+
         await this.installThemesAndPlugins();
-        
+
         Logger.log('=== THEMES AND PLUGINS INSTALLATION COMPLETED ===', '🎯');
         // Clear cache after installing packages
         await this.clearCache('after installing themes/plugins');
       } else {
         Logger.log('No themes or plugins configured for installation', 'ℹ️');
       }
-      
+
       Logger.success('Mautic installation completed successfully');
       return true;
-      
+
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Logger.error(`Installation failed: ${errorMessage}`);
       return false;
     }
   }
-  
+
   private async createEnvironmentFile(): Promise<void> {
     Logger.log('Creating environment configuration...', '⚙️');
-    
+
     const envContent = `
 # Database Configuration
 MAUTIC_DB_HOST=mysql
@@ -319,39 +320,39 @@ MYSQL_PASSWORD=${this.config.mysqlPassword}
 MAUTIC_VERSION=${this.config.mauticVersion.endsWith('-apache') ? this.config.mauticVersion : `${this.config.mauticVersion}-apache`}
 PORT=${this.config.port}
 `.trim();
-    
+
     await Deno.writeTextFile('.mautic_env', envContent);
     await Deno.chmod('.mautic_env', 0o600);
-    
+
     Logger.success('Environment file created');
   }
-  
+
   private async createDockerCompose(): Promise<void> {
     Logger.log('Creating docker-compose.yml from template...', '🐳');
-    
+
     try {
       // Template should already be copied to current directory by deploy.sh
       // If not, try to copy it from the action path
       const templateExists = await ProcessManager.runShell('test -f docker-compose.yml', { ignoreError: true });
-      
+
       if (!templateExists.success) {
         Logger.log('Template not found in current directory, this should have been copied by deploy.sh', '⚠️');
         throw new Error('docker-compose.yml template not found. It should be copied by deploy.sh.');
       }
-      
+
       Logger.success('docker-compose.yml template ready');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to prepare docker-compose.yml: ${errorMessage}`);
     }
   }
-  
+
   public async installThemesAndPlugins(): Promise<void> {
     Logger.log('Installing themes and plugins...', '🎨');
-    
+
     // Check if we should use the custom Docker image approach or runtime installation
     const useCustomImage = await this.shouldUseCustomImageApproach();
-    
+
     if (useCustomImage) {
       await this.buildCustomMauticImage();
     } else {
@@ -369,33 +370,33 @@ PORT=${this.config.port}
 
   private async buildCustomMauticImage(): Promise<void> {
     Logger.log('Building custom Mautic image with plugins/themes...', '🏗️');
-    
+
     try {
       // Create build directory
       await ProcessManager.runShell('mkdir -p build/plugins build/themes');
-      
+
       // Copy Dockerfile template
       await ProcessManager.runShell('cp templates/Dockerfile.custom build/Dockerfile');
-      
+
       // Download and prepare plugins/themes
       await this.prepareCustomContent();
-      
+
       // Build custom image
       const imageName = `mautic-custom:${this.config.mauticVersion}`;
-      const baseVersion = this.config.mauticVersion.endsWith('-apache') 
-        ? this.config.mauticVersion 
+      const baseVersion = this.config.mauticVersion.endsWith('-apache')
+        ? this.config.mauticVersion
         : `${this.config.mauticVersion}-apache`;
-      
+
       const buildCommand = `cd build && docker build --build-arg MAUTIC_VERSION=${baseVersion} -t ${imageName} .`;
       const buildSuccess = await ProcessManager.runShell(buildCommand);
-      
+
       if (!buildSuccess.success) {
         throw new Error('Failed to build custom Mautic image');
       }
-      
+
       // Update docker-compose to use custom image
       await this.updateComposeForCustomImage(imageName);
-      
+
       Logger.success('Custom Mautic image built successfully');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -412,7 +413,7 @@ PORT=${this.config.port}
         await this.downloadTheme(theme);
       }
     }
-    
+
     // Install plugins
     if (this.config.mauticPlugins) {
       const plugins = this.config.mauticPlugins.split(',').map(p => p.trim());
@@ -424,31 +425,31 @@ PORT=${this.config.port}
 
   private async downloadTheme(themeUrl: string): Promise<void> {
     Logger.log(`Downloading theme: ${themeUrl}`, '🎨');
-    
+
     try {
       const fileName = `theme-${Date.now()}.zip`;
       const downloadPath = `build/themes/${fileName}`;
-      
+
       // Download the theme ZIP file
       const downloadResult = await ProcessManager.runShell(
         `curl -L -o "${downloadPath}" "${themeUrl}"`,
         { ignoreError: true }
       );
-      
+
       if (!downloadResult.success) {
         throw new Error(`Failed to download theme: ${downloadResult.output}`);
       }
-      
+
       // Extract the ZIP file to themes directory
       const extractResult = await ProcessManager.runShell(
         `cd build/themes && unzip -o "${fileName}" && rm "${fileName}"`,
         { ignoreError: true }
       );
-      
+
       if (!extractResult.success) {
         throw new Error(`Failed to extract theme: ${extractResult.output}`);
       }
-      
+
       Logger.success(`Theme downloaded and extracted: ${themeUrl}`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -459,20 +460,20 @@ PORT=${this.config.port}
 
   private async downloadPlugin(pluginUrl: string): Promise<void> {
     Logger.log(`Downloading plugin: ${pluginUrl}`, '🔌');
-    
+
     try {
       // Parse URL parameters if it's a GitHub URL
       let cleanUrl = pluginUrl;
       let directory = '';
       let token = '';
-      
+
       if (pluginUrl.startsWith('https://github.com/') && pluginUrl.includes('?')) {
         try {
           const url = new URL(pluginUrl);
           cleanUrl = `${url.protocol}//${url.host}${url.pathname}`;
           directory = url.searchParams.get('directory') || '';
           token = url.searchParams.get('token') || '';
-          
+
           // Convert GitHub archive URLs to API endpoints for private repositories
           if (token && cleanUrl.includes('/archive/')) {
             // Convert https://github.com/owner/repo/archive/refs/heads/branch.zip
@@ -488,13 +489,13 @@ PORT=${this.config.port}
           Logger.log(`Failed to parse URL parameters, using URL as-is: ${error}`, '⚠️');
         }
       }
-      
+
       // Use URL-specific token if provided, otherwise fall back to global token
       const authToken = token || this.config.githubToken;
-      
+
       const fileName = `plugin-${Date.now()}.zip`;
       const downloadPath = `build/plugins/${fileName}`;
-      
+
       // Prepare download command with authentication if needed
       let downloadCommand = '';
       if (authToken && cleanUrl.includes('github.com')) {
@@ -506,23 +507,23 @@ PORT=${this.config.port}
         Logger.log(`Downloading from public URL: ${cleanUrl}`, '🔍');
         downloadCommand = `curl -L -o "${downloadPath}" --connect-timeout 30 --max-time 60 --retry 2 "${cleanUrl}"`;
       }
-      
+
       // Download the plugin ZIP file
       const downloadResult = await ProcessManager.runShell(downloadCommand, { ignoreError: true });
-      
+
       if (!downloadResult.success) {
         throw new Error(`Failed to download plugin: ${downloadResult.output}`);
       }
-      
+
       // Validate ZIP file before extraction
       const validateResult = await ProcessManager.runShell(`file "${downloadPath}" | grep -q "Zip archive data"`, { ignoreError: true });
-      
+
       if (!validateResult.success) {
         // Clean up invalid file
         await ProcessManager.runShell(`rm -f "${downloadPath}"`, { ignoreError: true });
         throw new Error('Downloaded file is not a valid ZIP archive');
       }
-      
+
       // Extract the ZIP file to plugins directory
       let extractCommand = '';
       if (directory) {
@@ -536,13 +537,13 @@ PORT=${this.config.port}
       } else {
         extractCommand = `cd build/plugins && unzip -o "${fileName}" && rm "${fileName}"`;
       }
-      
+
       const extractResult = await ProcessManager.runShell(extractCommand, { ignoreError: true });
-      
+
       if (!extractResult.success) {
         throw new Error(`Failed to extract plugin: ${extractResult.output}`);
       }
-      
+
       const displayName = directory ? `${pluginUrl} → ${directory}` : pluginUrl;
       Logger.success(`Plugin downloaded and extracted: ${displayName}`);
     } catch (error: unknown) {
@@ -554,14 +555,14 @@ PORT=${this.config.port}
 
   private async updateComposeForCustomImage(imageName: string): Promise<void> {
     Logger.log('Updating docker-compose.yml to use custom image...', '📝');
-    
+
     try {
       const composeContent = await Deno.readTextFile('docker-compose.yml');
       const updatedContent = composeContent.replace(
         /image: mautic\/mautic:[^-]+-apache/g,
         `image: ${imageName}`
       );
-      
+
       await Deno.writeTextFile('docker-compose.yml', updatedContent);
       Logger.success('docker-compose.yml updated for custom image');
     } catch (error: unknown) {
@@ -573,7 +574,7 @@ PORT=${this.config.port}
   private async installThemesAndPluginsRuntime(): Promise<void> {
     Logger.log('=== STARTING RUNTIME INSTALLATION ===', '⚙️');
     Logger.log('Using runtime installation for themes and plugins (memory-efficient approach)...', '⚙️');
-    
+
     // Install themes
     if (this.config.mauticThemes) {
       Logger.log('Installing themes via runtime approach...', '🎨');
@@ -581,7 +582,7 @@ PORT=${this.config.port}
       Logger.log(`Found ${themes.length} themes to install`, '📊');
       let themeSuccessCount = 0;
       let themeFailureCount = 0;
-      
+
       for (const theme of themes) {
         try {
           Logger.log(`Processing theme: ${theme}`, '🎨');
@@ -595,7 +596,7 @@ PORT=${this.config.port}
           Logger.log('Continuing with remaining themes...', '➡️');
         }
       }
-      
+
       Logger.log(`Theme installation summary: ${themeSuccessCount} successful, ${themeFailureCount} failed`, '📊');
     }
 
@@ -607,7 +608,7 @@ PORT=${this.config.port}
       Logger.log(`Found ${plugins.length} plugins to install`, '📊');
       let pluginSuccessCount = 0;
       let pluginFailureCount = 0;
-      
+
       for (const plugin of plugins) {
         try {
           Logger.log(`Processing plugin: ${plugin}`, '🔌');
@@ -622,30 +623,30 @@ PORT=${this.config.port}
           Logger.log('Continuing with remaining plugins...', '➡️');
         }
       }
-      
+
       Logger.log(`Plugin installation summary: ${pluginSuccessCount} successful, ${pluginFailureCount} failed`, '📊');
     }
-    
+
     Logger.log('=== COMPLETED RUNTIME INSTALLATION ===', '✅');
     Logger.success('Runtime installation of themes and plugins completed');
   }
-  
+
   private async installTheme(themeUrl: string): Promise<void> {
     Logger.log(`Installing theme: ${themeUrl}`, '🎨');
-    
+
     try {
       // Parse URL parameters if it's a GitHub URL
       let cleanUrl = themeUrl;
       let directory = '';
       let token = '';
-      
+
       if (themeUrl.startsWith('https://github.com/') && themeUrl.includes('?')) {
         try {
           const url = new URL(themeUrl);
           cleanUrl = `${url.protocol}//${url.host}${url.pathname}`;
           directory = url.searchParams.get('directory') || '';
           token = url.searchParams.get('token') || '';
-          
+
           // Convert GitHub archive URLs to API endpoints for private repositories
           if (token && cleanUrl.includes('/archive/')) {
             // Convert https://github.com/owner/repo/archive/refs/heads/branch.zip
@@ -661,7 +662,7 @@ PORT=${this.config.port}
           Logger.log(`Failed to parse URL parameters, using URL as-is: ${error}`, '⚠️');
         }
       }
-      
+
       // Use URL-specific token if provided, otherwise fall back to global token
       const authToken = token || this.config.githubToken;
 
@@ -669,11 +670,11 @@ PORT=${this.config.port}
       if (directory) {
         Logger.log(`🔄 Checking for existing theme: ${directory}`, '🔄');
         const checkExisting = await ProcessManager.runShell(`docker exec mautic_web bash -c 'test -d /var/www/html/docroot/themes/${directory}'`, { ignoreError: true });
-        
+
         if (checkExisting.success) {
           Logger.log(`🗑️ Removing existing theme directory: ${directory}`, '🗑️');
           const removeResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'rm -rf /var/www/html/docroot/themes/${directory}'`, { ignoreError: true });
-          
+
           if (!removeResult.success) {
             Logger.log(`⚠️ Warning: Could not remove existing theme directory: ${removeResult.output}`, '⚠️');
           } else {
@@ -683,7 +684,7 @@ PORT=${this.config.port}
           Logger.log(`ℹ️ No existing theme directory found (fresh installation)`, 'ℹ️');
         }
       }
-      
+
       // Prepare curl command
       let curlCommand = '';
       if (authToken && cleanUrl.includes('github.com')) {
@@ -694,7 +695,7 @@ PORT=${this.config.port}
         Logger.log(`Installing theme from public URL: ${cleanUrl}`, '🔍');
         curlCommand = `curl -L -o theme.zip --connect-timeout 30 --max-time 60 --retry 2 "${cleanUrl}"`;
       }
-      
+
       // Extract to specified directory or default behavior
       let extractCommand = '';
       if (directory) {
@@ -708,7 +709,7 @@ PORT=${this.config.port}
       } else {
         extractCommand = `unzip -o theme.zip && rm theme.zip`;
       }
-      
+
       await ProcessManager.runShell(`
         docker exec mautic_web bash -c "cd /var/www/html/docroot/themes && ${curlCommand} && ${extractCommand}"
       `, { ignoreError: true });
@@ -717,7 +718,7 @@ PORT=${this.config.port}
       if (directory) {
         Logger.log(`🔒 Setting correct ownership and permissions for theme ${directory}...`, '🔒');
         const chownResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'chown -R www-data:www-data /var/www/html/docroot/themes/${directory} && chmod -R 755 /var/www/html/docroot/themes/${directory}'`, { ignoreError: true });
-        
+
         if (chownResult.success) {
           Logger.log(`✅ Theme ownership and permissions set correctly`, '✅');
         } else {
@@ -728,13 +729,13 @@ PORT=${this.config.port}
       // Clear cache after theme installation
       Logger.log(`🧹 Clearing cache after theme installation...`, '🧹');
       const cacheResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html && rm -rf var/cache/prod/*'`, { ignoreError: true });
-      
+
       if (!cacheResult.success) {
         Logger.log(`⚠️ Warning: Cache clear failed: ${cacheResult.output}`, '⚠️');
       } else {
         Logger.log(`✅ Cache cleared successfully`, '✅');
       }
-      
+
       const displayName = directory ? `${themeUrl} → ${directory}` : themeUrl;
       Logger.success(`Theme installed: ${displayName}`);
     } catch (error: unknown) {
@@ -744,23 +745,23 @@ PORT=${this.config.port}
       throw error;
     }
   }
-  
+
   private async installPlugin(pluginUrl: string): Promise<void> {
     Logger.log(`Installing plugin: ${pluginUrl}`, '🔌');
-    
+
     try {
       // Parse URL parameters if it's a GitHub URL
       let cleanUrl = pluginUrl;
       let directory = '';
       let token = '';
-      
+
       if (pluginUrl.startsWith('https://github.com/') && pluginUrl.includes('?')) {
         try {
           const url = new URL(pluginUrl);
           cleanUrl = `${url.protocol}//${url.host}${url.pathname}`;
           directory = url.searchParams.get('directory') || '';
           token = url.searchParams.get('token') || '';
-          
+
           // Convert GitHub archive URLs to API endpoints for private repositories
           if (token && cleanUrl.includes('/archive/')) {
             // Convert https://github.com/owner/repo/archive/refs/heads/branch.zip
@@ -776,7 +777,7 @@ PORT=${this.config.port}
           Logger.log(`Failed to parse URL parameters, using URL as-is: ${error}`, '⚠️');
         }
       }
-      
+
       // Use URL-specific token if provided, otherwise fall back to global token
       const authToken = token || this.config.githubToken;
 
@@ -787,11 +788,11 @@ PORT=${this.config.port}
       if (directory) {
         Logger.log(`🔄 Checking for existing plugin: ${directory}`, '🔄');
         const checkExisting = await ProcessManager.runShell(`docker exec mautic_web bash -c 'test -d /var/www/html/docroot/plugins/${directory}'`, { ignoreError: true });
-        
+
         if (checkExisting.success) {
           Logger.log(`🗑️ Removing existing plugin directory: ${directory}`, '🗑️');
           const removeResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'rm -rf /var/www/html/docroot/plugins/${directory}'`, { ignoreError: true });
-          
+
           if (!removeResult.success) {
             Logger.log(`⚠️ Warning: Could not remove existing plugin directory: ${removeResult.output}`, '⚠️');
           } else {
@@ -801,7 +802,7 @@ PORT=${this.config.port}
           Logger.log(`ℹ️ No existing plugin directory found (fresh installation)`, 'ℹ️');
         }
       }
-      
+
       // Check if required tools are available in container
       const toolsCheck = await ProcessManager.runShell(`docker exec mautic_web bash -c 'which curl && which unzip && which file'`, { ignoreError: true });
       if (!toolsCheck.success) {
@@ -809,7 +810,7 @@ PORT=${this.config.port}
       } else {
         Logger.log(`✅ Required tools available in container`, '✅');
       }
-      
+
       // Download the plugin using a more reliable approach
       let downloadCommand;
       if (authToken && cleanUrl.includes('github.com')) {
@@ -818,7 +819,7 @@ PORT=${this.config.port}
       } else {
         downloadCommand = `docker exec mautic_web bash -c 'cd /var/www/html/docroot/plugins && curl -L -o plugin.zip --connect-timeout 30 --max-time 60 --retry 2 "${cleanUrl}"'`;
       }
-      
+
       const downloadResult = await ProcessManager.runShell(downloadCommand, { ignoreError: true });
 
       if (!downloadResult.success) {
@@ -829,10 +830,10 @@ PORT=${this.config.port}
       } else {
         Logger.log(`✅ Download completed successfully`, '✅');
       }
-      
+
       // Validate ZIP file before extraction
       const validateResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html/docroot/plugins && file plugin.zip'`, { ignoreError: true });
-      
+
       if (!validateResult.success) {
         Logger.log(`⚠️ Could not validate ZIP file: ${validateResult.output}`, '⚠️');
       } else {
@@ -843,7 +844,7 @@ PORT=${this.config.port}
           throw new Error('Downloaded file is not a valid ZIP archive');
         }
       }
-      
+
       // Extract to specified directory or default behavior
       let extractResult;
       if (directory) {
@@ -851,14 +852,14 @@ PORT=${this.config.port}
         if (cleanUrl.includes('api.github.com')) {
           // GitHub API creates a zip with a subdirectory named after the commit
           Logger.log(`🔍 Extracting GitHub API zipball to ${directory}...`, '🔍');
-          
+
           // First, let's see what's in the zip
           const zipContents = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html/docroot/plugins && unzip -l plugin.zip'`, { ignoreError: true });
           if (zipContents.success) {
             Logger.log(`📋 ZIP file contents:`, '📋');
             Logger.log(zipContents.output, '📄');
           }
-          
+
           // Extract to temp, find the subdirectory, then move contents to target directory
           const extractCmd = `cd /var/www/html/docroot/plugins && \\
 echo "=== STARTING EXTRACTION PROCESS ===" && \\
@@ -893,11 +894,11 @@ echo "Cleaning up temp_extract" && \\
 rm -rf temp_extract && \\
 echo "=== EXTRACTION PROCESS COMPLETE ==="`;
           extractResult = await ProcessManager.runShell(`docker exec mautic_web bash -c '${extractCmd}'`, { ignoreError: true });
-          
+
           // Log what happened during extraction
           Logger.log(`📋 EXTRACTION OUTPUT:`, '📋');
           Logger.log(extractResult.output, '📄');
-          
+
           if (!extractResult.success) {
             Logger.log(`❌ GitHub API zipball extraction failed with exit code: ${extractResult.exitCode}`, '❌');
             // Check if temp_extract still exists and what's in it
@@ -908,7 +909,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
             }
           } else {
             Logger.log(`✅ GitHub API zipball extraction command completed successfully`, '✅');
-            
+
             // CRITICAL: Check if files actually made it to the target directory
             const finalCheck = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html/docroot/plugins && echo "=== FINAL VERIFICATION ===" && ls -la ${directory}/ && echo "=== FILE COUNT ===" && find ${directory} -type f | wc -l && echo "=== SAMPLE FILES ===" && find ${directory} -type f | head -5'`, { ignoreError: true });
             if (finalCheck.success) {
@@ -922,13 +923,13 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
       } else {
         extractResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html/docroot/plugins && unzip -o plugin.zip && rm plugin.zip'`, { ignoreError: true });
       }
-      
+
       if (!extractResult.success) {
         Logger.log(`❌ Extraction failed: ${extractResult.output}`, '❌');
         throw new Error(`Failed to extract plugin: ${extractResult.output}`);
       } else {
         Logger.log(`✅ Extraction completed successfully`, '✅');
-        
+
         // Verify what was installed
         const verifyResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html/docroot/plugins && ls -la'`, { ignoreError: true });
         if (verifyResult.success) {
@@ -948,7 +949,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         // Verify that the main plugin file exists if we have a directory name
         if (directory) {
           const pluginFileCheck = await ProcessManager.runShell(`docker exec mautic_web bash -c 'test -f /var/www/html/docroot/plugins/${directory}/${directory}.php'`, { ignoreError: true });
-          
+
           if (pluginFileCheck.success) {
             Logger.log(`✅ Main plugin file ${directory}.php found in correct location`, '✅');
           } else {
@@ -963,7 +964,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
           // Fix ownership and permissions for the plugin directory
           Logger.log(`🔒 Setting correct ownership and permissions for ${directory}...`, '🔒');
           const chownResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'chown -R www-data:www-data /var/www/html/docroot/plugins/${directory} && chmod -R 755 /var/www/html/docroot/plugins/${directory}'`, { ignoreError: true });
-          
+
           if (chownResult.success) {
             Logger.log(`✅ Ownership and permissions set correctly`, '✅');
           } else {
@@ -981,7 +982,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         // Clear cache first to ensure autoloading works
         Logger.log(`🧹 Clearing cache before plugin registration...`, '🧹');
         const preCacheResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html && rm -rf var/cache/prod/* var/cache/dev/*'`, { ignoreError: true });
-        
+
         if (!preCacheResult.success) {
           Logger.log(`⚠️ Warning: Pre-cache clear failed: ${preCacheResult.output}`, '⚠️');
         } else {
@@ -991,7 +992,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         // Run Mautic plugin installation command
         Logger.log(`🔧 Running Mautic plugin installation command...`, '🔧');
         const consoleResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html && php bin/console mautic:plugins:install --force'`, { ignoreError: true });
-        
+
         if (!consoleResult.success) {
           Logger.log(`⚠️ Warning: Plugin console command failed: ${consoleResult.output}`, '⚠️');
           // Try alternative approach: just reload plugins
@@ -1011,14 +1012,14 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         // Clear cache after plugin installation
         Logger.log(`🧹 Clearing cache after plugin installation...`, '🧹');
         const cacheResult = await ProcessManager.runShell(`docker exec mautic_web bash -c 'cd /var/www/html && rm -rf var/cache/prod/* var/cache/dev/*'`, { ignoreError: true });
-        
+
         if (!cacheResult.success) {
           Logger.log(`⚠️ Warning: Cache clear failed: ${cacheResult.output}`, '⚠️');
         } else {
           Logger.log(`✅ Cache cleared successfully`, '✅');
         }
       }
-      
+
       const displayName = directory ? `${pluginUrl} → ${directory}` : pluginUrl;
       Logger.success(`Plugin installed: ${displayName}`);
     } catch (error: unknown) {
@@ -1034,26 +1035,26 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
    */
   private async runMauticInstallation(): Promise<void> {
     Logger.info('🔧 Running Mautic installation...');
-    
+
     try {
       // First, let's ensure the container is ready and database is accessible
       Logger.log('Pre-installation check: Testing database connection...', '🔍');
       try {
         const dbTest = await ProcessManager.run([
-          'docker', 'exec', 'mautic_web', 
-          'php', '-r', 
+          'docker', 'exec', 'mautic_web',
+          'php', '-r',
           `try { $pdo = new PDO('mysql:host=mautic_db;dbname=${this.config.mysqlDatabase}', '${this.config.mysqlUser}', '${this.config.mysqlPassword}'); echo 'DB_CONNECTION_OK'; } catch(Exception $e) { echo 'DB_ERROR: ' . $e->getMessage(); }`
         ]);
         Logger.log(`Database test result: ${dbTest.output}`, '📊');
       } catch (error) {
         Logger.log(`Database test failed: ${error}`, '⚠️');
       }
-      
+
       // Check if mautic:install command help works
       Logger.log('Testing mautic:install command availability...', '🔍');
       try {
         const helpResult = await ProcessManager.run([
-          'docker', 'exec', 'mautic_web', 
+          'docker', 'exec', 'mautic_web',
           'timeout', '30',  // 30 second timeout
           'php', '/var/www/html/bin/console', 'mautic:install', '--help'
         ]);
@@ -1065,25 +1066,25 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         Logger.log(`Install command test failed: ${error}`, '❌');
         throw new Error('mautic:install command not available or hanging');
       }
-      
+
       // Run the actual installation with timeout using ProcessManager
       Logger.log('Starting Mautic installation...', '🚀');
-      
-      const siteUrl = this.config.domainName 
-        ? `https://${this.config.domainName}` 
+
+      const siteUrl = this.config.domainName
+        ? `https://${this.config.domainName}`
         : `http://${this.config.ipAddress}:${this.config.port}`;
-      
+
       Logger.log(`Site URL: ${siteUrl}`, '🌐');
       Logger.log('Database: mautic_db', '🗄️');
       Logger.log(`Admin email: ${this.config.emailAddress}`, '👤');
-      
+
       // Use timeout command to limit installation time
       const installResult = await ProcessManager.run([
         'timeout', '300', // 5 minutes timeout
-        'docker', 'exec', 
+        'docker', 'exec',
         '--user', 'www-data',
         '--workdir', '/var/www/html',
-        'mautic_web', 
+        'mautic_web',
         'php', './bin/console', 'mautic:install',
         siteUrl,
         '--admin_email=' + this.config.emailAddress,
@@ -1092,7 +1093,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         '--no-interaction',
         '-vvv'
       ], { timeout: 320000 }); // ProcessManager timeout slightly longer than shell timeout
-      
+
       if (installResult.success) {
         Logger.success('✅ Mautic installation completed successfully');
         Logger.log(installResult.output, '📄');
@@ -1101,7 +1102,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         Logger.log(installResult.output, '📄');
         throw new Error(`Installation failed: ${installResult.output}`);
       }
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Logger.error(`Mautic installation failed: ${errorMessage}`);
@@ -1114,7 +1115,7 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
    */
   private async fixMediaHtaccess(): Promise<void> {
     Logger.log('� Checking and fixing media .htaccess files...', '�');
-    
+
     try {
       // Use the official Mautic 6.x .htaccess for media directories
       const officialMediaHtaccess = `<IfModule mod_authz_core.c>
@@ -1130,17 +1131,17 @@ echo "=== EXTRACTION PROCESS COMPLETE ==="`;
         `docker exec mautic_web bash -c 'cat /var/www/html/docroot/media/images/.htaccess 2>/dev/null'`,
         { ignoreError: true }
       );
-      
+
       if (checkImagesHtaccess.success && checkImagesHtaccess.output.includes('deny from all')) {
         Logger.log(`⚠️ Found incorrect .htaccess in images directory, fixing...`, '⚠️');
-        
+
         const fixImagesResult = await ProcessManager.runShell(
           `docker exec mautic_web bash -c 'cat > /var/www/html/docroot/media/images/.htaccess << "EOF"
 ${officialMediaHtaccess}
 EOF'`,
           { ignoreError: true }
         );
-        
+
         if (fixImagesResult.success) {
           Logger.log(`✅ Fixed .htaccess for images directory`, '✅');
         } else {
@@ -1155,17 +1156,17 @@ EOF'`,
         `docker exec mautic_web bash -c 'cat /var/www/html/docroot/media/files/.htaccess 2>/dev/null'`,
         { ignoreError: true }
       );
-      
+
       if (checkFilesHtaccess.success && checkFilesHtaccess.output.includes('deny from all')) {
         Logger.log(`⚠️ Found incorrect .htaccess in files directory, fixing...`, '⚠️');
-        
+
         const fixFilesResult = await ProcessManager.runShell(
           `docker exec mautic_web bash -c 'cat > /var/www/html/docroot/media/files/.htaccess << "EOF"
 ${officialMediaHtaccess}
 EOF'`,
           { ignoreError: true }
         );
-        
+
         if (fixFilesResult.success) {
           Logger.log(`✅ Fixed .htaccess for files directory`, '✅');
         } else {
@@ -1174,7 +1175,7 @@ EOF'`,
       } else {
         Logger.log(`✅ Files .htaccess appears to be correct`, '✅');
       }
-      
+
       Logger.success('✅ Media .htaccess check completed');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1188,15 +1189,15 @@ EOF'`,
    */
   public async clearCache(context: string): Promise<void> {
     Logger.info(`🧹 Clearing cache ${context}...`);
-    
+
     try {
       // Use simple rm command - much faster than PHP console commands
       // Clear both prod and dev cache directories to be safe
       await ProcessManager.run([
-        'docker', 'exec', 'mautic_web', 
+        'docker', 'exec', 'mautic_web',
         'bash', '-c', 'rm -rf /var/www/html/var/cache/prod* /var/www/html/var/cache/dev* || true'
       ], { timeout: 30000 }); // 30 second timeout - should be very fast
-      
+
       Logger.success(`✅ Cache cleared ${context}`);
     } catch (error) {
       // Cache clearing is not critical - log but don't fail deployment

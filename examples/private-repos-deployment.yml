@@ -1,3 +1,4 @@
+# examples/private-repos-deployment.yml
 name: Deploy Mautic with Private Packages (URL Parameters)
 
 on:

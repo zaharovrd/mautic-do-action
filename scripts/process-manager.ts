@@ -1,4 +1,5 @@
 /**
+ * scripts/process-manager.ts
  * Process management utilities
  */
 
@@ -9,23 +10,23 @@ export class ProcessManager {
     if (!cmd[0]) {
       throw new Error('Command cannot be empty');
     }
-    
+
     try {
       const commandOptions: any = {
         args: cmd.slice(1),
         stdout: 'piped' as const,
         stderr: 'piped' as const,
       };
-      
+
       if (options.cwd) {
         commandOptions.cwd = options.cwd;
       }
-      
+
       const process = new Deno.Command(cmd[0], commandOptions);
-      
+
       const { code, stdout, stderr } = await process.output();
       const output = new TextDecoder().decode(stdout) + new TextDecoder().decode(stderr);
-      
+
       return {
         success: code === 0,
         output: output.trim(),
@@ -39,7 +40,7 @@ export class ProcessManager {
       throw error;
     }
   }
-  
+
   static async runShell(command: string, options: ProcessOptions = {}): Promise<ProcessResult> {
     return this.run(['bash', '-c', command], options);
   }

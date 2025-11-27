@@ -1,6 +1,10 @@
+# deno.json
 {
   "compilerOptions": {
-    "lib": ["deno.window", "deno.ns"],
+    "lib": [
+      "deno.window",
+      "deno.ns"
+    ],
     "strict": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

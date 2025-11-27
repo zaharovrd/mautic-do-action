@@ -1,3 +1,4 @@
+# examples/scheduled-deployment.yml
 name: Scheduled Mautic Deployment
 
 on:

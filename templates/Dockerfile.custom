@@ -1,3 +1,5 @@
+# templates/Dockerfile.custom
+
 ARG MAUTIC_VERSION=6.0.5-apache
 FROM mautic/mautic:${MAUTIC_VERSION}
 

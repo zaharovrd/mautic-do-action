@@ -1,3 +1,4 @@
+# scripts/deploy.sh
 #!/bin/bash
 
 set -e

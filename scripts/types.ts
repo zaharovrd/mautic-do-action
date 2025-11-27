@@ -1,4 +1,5 @@
 /**
+ * scripts/types.ts
  * Type definitions for Mautic deployment system
  */
 

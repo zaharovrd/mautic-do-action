@@ -1,3 +1,4 @@
+# .github/copilot-instructions.md
 # Mautic Deploy Action - Copilot Instructions
 
 ## Project Overview

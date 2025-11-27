@@ -1,3 +1,4 @@
+# examples/custom-plugins-deployment.md
 # Mautic with Custom Plugins Example
 
 This example demonstrates deploying Mautic with custom plugins using the Mautic Deploy Action's custom image feature.

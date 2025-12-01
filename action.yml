@@ -31,6 +31,9 @@ inputs:
     description: 'Port for Mautic instance'
     required: false
     default: '8001'
+github-token:
+  description: 'GitHub Personal Access Token for accessing private language pack repository (optional)'
+  required: false
   
   # --- Конфигурация VPS ---
   domain:
@@ -82,11 +85,7 @@ inputs:
       https://github.com/vendor/premium-plugin/archive/v2.1.0.zip?directory=PremiumPlugin&token=ghp_yyyyyyyyyyyyyyyyyyyy
       
     required: false
-  
-  github-token:
-  description: 'GitHub Personal Access Token for accessing private language pack repository (optional)'
-  required: false
-  
+    
   # --- Конфигурация Базы Данных ---
   mysql-database:
     description: 'MySQL database name'

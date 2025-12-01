@@ -82,7 +82,10 @@ inputs:
       https://github.com/vendor/premium-plugin/archive/v2.1.0.zip?directory=PremiumPlugin&token=ghp_yyyyyyyyyyyyyyyyyyyy
       
     required: false
-
+  
+  github-token:
+  description: 'GitHub Personal Access Token for accessing private language pack repository (optional)'
+  required: false
   
   # --- Конфигурация Базы Данных ---
   mysql-database:

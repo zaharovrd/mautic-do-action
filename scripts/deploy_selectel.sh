@@ -162,6 +162,81 @@ mkdir -p build
 deno compile --allow-all --target x86_64-unknown-linux-gnu --output ./build/setup "${ACTION_PATH}/scripts/setup.ts"
 if [ ! -f "./build/setup" ]; then echo "❌ Failed to compile Deno script"; exit 1; fi
 echo "✅ Compiled successfully"
+
+# --- Шаг: Загрузка и применение кастомного перевода ---
+echo "🌐 Cloning custom language pack..."
+# Создаем временный SSH ключ для GitHub (если репозиторий приватный)
+if [ -n "${INPUT_GITHUB_TOKEN:-}" ]; then
+    echo "🔑 Using GitHub token for authentication..."
+    # Добавляем ключ в агента SSH для HTTPS клонирования с токеном
+    # Или клонируем по SSH, если настроен deploy key
+    GIT_CLONE_URL="https://${INPUT_GITHUB_TOKEN}@github.com/zaharovrd/language-packs.git"
+else
+    echo "⚠️ No GitHub token provided, trying public access..."
+    GIT_CLONE_URL="https://github.com/zaharovrd/language-packs.git"
+fi
+
+# Клонируем репозиторий с переводами
+TEMP_LANG_DIR=$(mktemp -d)
+if ! git clone --depth 1 "$GIT_CLONE_URL" "$TEMP_LANG_DIR" 2>/dev/null; then
+    echo "⚠️ Could not clone language pack, proceeding without custom translations"
+    rm -rf "$TEMP_LANG_DIR"
+else
+    echo "✅ Language pack cloned successfully"
+    
+    # Проверяем структуру архива
+    if [ -f "$TEMP_LANG_DIR/mautibox_ru.zip" ]; then
+        echo "📦 Found processed translation archive"
+        # Копируем архив на сервер вместе с другими файлами
+        cp "$TEMP_LANG_DIR/mautibox_ru.zip" ./
+        # Добавляем в список файлов для копирования на сервер
+        FILES_TO_COPY="$FILES_TO_COPY mautibox_ru.zip"
+        
+        # Также добавляем команду для распаковки в setup.ts
+        cat > apply-translation.sh << 'EOF'
+#!/bin/bash
+echo "🌐 Applying custom Russian translation..."
+if [ -f /var/www/mautibox_ru.zip ]; then
+    echo "📦 Unpacking translation archive..."
+    unzip -q /var/www/mautibox_ru.zip -d /tmp/mautic_translation/
+    
+    # Копируем файлы перевода в Mautic
+    if [ -d "/tmp/mautic_translation/" ]; then
+        echo "📄 Copying translation files to Mautic..."
+        # Находим и копируем все файлы перевода
+        find /tmp/mautic_translation/ -name "*.ini" -o -name "*.properties" | while read -r file; do
+            # Определяем относительный путь
+            rel_path="${file#/tmp/mautic_translation/}"
+            # Создаем целевую директорию
+            target_dir="/var/www/html/translations/$(dirname "$rel_path")"
+            mkdir -p "$target_dir"
+            cp "$file" "$target_dir/"
+        done
+        
+        echo "✅ Custom translation applied successfully"
+        
+        # Устанавливаем русский язык по умолчанию в конфигурации Mautic
+        if [ -f "/var/www/html/config/local.php" ]; then
+            echo "🔧 Setting Russian as default language..."
+            sed -i "s/'locale' => '[^']*'/'locale' => 'ru_RU'/" /var/www/html/config/local.php 2>/dev/null || \
+            echo "Could not update locale in config"
+        fi
+    fi
+    rm -rf /tmp/mautic_translation/
+else
+    echo "⚠️ No translation archive found"
+fi
+EOF
+        chmod +x apply-translation.sh
+        scp -o StrictHostKeyChecking=no -i "${TEMP_SSH_KEY_PATH}" apply-translation.sh root@${VPS_IP}:/var/www/
+    else
+        echo "⚠️ No mautibox_ru.zip found in repository"
+    fi
+    
+    # Очищаем временную директорию
+    rm -rf "$TEMP_LANG_DIR"
+fi
+
 echo "🚀 Deploying to server..."
 ssh -o StrictHostKeyChecking=no -i "${TEMP_SSH_KEY_PATH}" root@${VPS_IP} "mkdir -p /var/www"
 scp -o StrictHostKeyChecking=no -i "${TEMP_SSH_KEY_PATH}" deploy.env docker-compose.yml .mautic_env.template root@${VPS_IP}:/var/www/

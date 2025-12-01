@@ -31,10 +31,10 @@ inputs:
     description: 'Port for Mautic instance'
     required: false
     default: '8001'
-github-token:
-  description: 'GitHub Personal Access Token for accessing private language pack repository (optional)'
-  required: false
-  
+  github-token:
+    description: 'GitHub Personal Access Token for accessing private language pack repository (optional)'
+    required: false
+
   # --- Конфигурация VPS ---
   domain:
     description: 'Domain name for your Mautic instance (optional, will use IP if not provided)'

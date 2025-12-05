@@ -39,7 +39,7 @@ inputs:
   language-pack-url:
     description: "URL to the language pack ZIP file (e.g., from a GitHub release)."
     required: false
-    default: "https://github.com/zaharovrd/language-packs/raw/main/mautibox_ru.zip"
+    default: "https://github.com/zaharovrd/language-packs/raw/master/mautibox_ru.zip"
   language-code:
     description: "The language code to set as default during installation (e.g., ru, es)."
     required: false

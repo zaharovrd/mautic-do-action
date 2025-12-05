@@ -358,24 +358,24 @@ PORT=${this.config.port}
 
       // Команда для выполнения внутри контейнера
       // Языковые пакеты хранятся в директории /var/www/html/translations
-      const fullCommand = `
-        echo "Ensuring translations directory exists..." && \\
-        mkdir -p /var/www/html/translations && \\
-        cd /var/www/html/translations && \\
-        echo "Downloading language pack..." && \\
-        ${curlCommand} && \\
-        echo "Download complete. Unzipping..." && \\
-        unzip -o langpack.zip && \\
-        echo "Unzip complete. Cleaning up..." && \\
-        rm langpack.zip && \\
-        echo "Fixing permissions..." && \\
-        chown -R www-data:www-data . && \\
-        echo "Language pack installation finished."
-      `;
-
+      const commands = [
+        'echo "Ensuring translations directory exists..."',
+        'mkdir -p /var/www/html/translations',
+        'cd /var/www/html/translations',
+        'echo "Downloading language pack..."',
+        curlCommand, // Добавляем уже сформированную команду curl
+        'echo "Download complete. Unzipping..."',
+        'unzip -o langpack.zip',
+        'echo "Unzip complete. Cleaning up..."',
+        'rm langpack.zip',
+        'echo "Fixing permissions..."',
+        'chown -R www-data:www-data .',
+        'echo "Language pack installation finished."'
+      ];
+      const fullCommand = commands.join(' && ');
 
       const result = await ProcessManager.runShell(
-        `docker exec mautic_web bash -c '${fullCommand.replace(/\n/g, '')}'`,
+        `docker exec mautic_web bash -c "${fullCommand}"`,
         { ignoreError: true }
       );
 

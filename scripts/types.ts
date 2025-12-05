@@ -17,6 +17,8 @@ export interface DeploymentConfig {
   mauticVersion: string;
   mauticThemes?: string;
   mauticPlugins?: string;
+  mauticLanguagePackUrl?: string;
+  mauticLanguage?: string;
   mysqlDatabase: string;
   mysqlUser: string;
   mysqlPassword: string;

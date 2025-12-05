@@ -41,7 +41,7 @@ services:
       - .mautic_env
     environment:
       - DOCKER_MAUTIC_ROLE=mautic_web
-      - DOCKER_MAUTIC_LOAD_TEST_DATA=false
+      - DOCKER_MAUTIC_LOAD_TEST_DATA=true
       - DOCKER_MAUTIC_RUN_MIGRATIONS=true
     volumes: *mautic-volumes
     restart: unless-stopped

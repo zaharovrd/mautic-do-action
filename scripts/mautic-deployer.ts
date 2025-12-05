@@ -244,6 +244,15 @@ export class MauticDeployer {
       Logger.log('Waiting for Mautic web container to be healthy (up to 5 minutes)...', '🌐');
       await DockerManager.waitForHealthy('mautic_web', 300);
 
+      // Install custom language pack if specified
+      if (this.config.mauticLanguagePackUrl && this.config.mauticLanguage) {
+        Logger.log('=== STARTING LANGUAGE PACK INSTALLATION ===', '🌐');
+        await this.installLanguagePack();
+        Logger.log('=== LANGUAGE PACK INSTALLATION COMPLETED ===', '🌐');
+      } else {
+        Logger.log('No custom language pack configured for installation', 'ℹ️');
+      }
+
       // Run Mautic installation inside the container
       await this.runMauticInstallation();
 
@@ -285,6 +294,11 @@ export class MauticDeployer {
   private async createEnvironmentFile(): Promise<void> {
     Logger.log('Creating environment configuration...', '⚙️');
 
+    const languageConfig = this.config.mauticLanguage
+      ? `MAUTIC_DEFAULT_LANGUAGE=${this.config.mauticLanguage}`
+      : '# MAUTIC_DEFAULT_LANGUAGE is not set';
+
+
     const envContent = `
 # Database Configuration
 MAUTIC_DB_HOST=mysql
@@ -296,6 +310,7 @@ MAUTIC_DB_PORT=3306
 # Mautic Configuration
 MAUTIC_TRUSTED_PROXIES=["0.0.0.0/0"]
 MAUTIC_RUN_CRON_JOBS=true
+${languageConfig}
 
 # Admin Configuration
 MAUTIC_ADMIN_EMAIL=${this.config.emailAddress}
@@ -325,6 +340,54 @@ PORT=${this.config.port}
     await Deno.chmod('.mautic_env', 0o600);
 
     Logger.success('Environment file created');
+  }
+  private async installLanguagePack(): Promise<void> {
+    if (!this.config.mauticLanguagePackUrl) return;
+
+    Logger.log(`Installing language pack from: ${this.config.mauticLanguagePackUrl}`, '🌐');
+
+    try {
+      // Подготавливаем команду curl, используя токен, если он есть
+      let curlCommand = '';
+      if (this.config.githubToken && this.config.mauticLanguagePackUrl.includes('github.com')) {
+        Logger.log('Using GitHub token for downloading language pack', '🔐');
+        curlCommand = `curl -L -o langpack.zip -H "Authorization: Bearer ${this.config.githubToken}" --connect-timeout 30 --max-time 120 "${this.config.mauticLanguagePackUrl}"`;
+      } else {
+        curlCommand = `curl -L -o langpack.zip --connect-timeout 30 --max-time 120 "${this.config.mauticLanguagePackUrl}"`;
+      }
+
+      // Команда для выполнения внутри контейнера
+      // Языковые пакеты хранятся в директории /var/www/html/translations
+      const fullCommand = `
+        cd /var/www/html/translations && \\
+        echo "Downloading language pack..." && \\
+        ${curlCommand} && \\
+        echo "Download complete. Unzipping..." && \\
+        unzip -o langpack.zip && \\
+        echo "Unzip complete. Cleaning up..." && \\
+        rm langpack.zip && \\
+        echo "Fixing permissions..." && \\
+        chown -R www-data:www-data . && \\
+        echo "Language pack installation finished."
+      `;
+
+      const result = await ProcessManager.runShell(
+        `docker exec mautic_web bash -c '${fullCommand}'`,
+        { ignoreError: true }
+      );
+
+      if (!result.success) {
+        throw new Error(`Failed to install language pack: ${result.output}`);
+      }
+
+      Logger.log(result.output, '📄');
+      Logger.success(`Language pack for '${this.config.mauticLanguage}' installed successfully.`);
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error(`❌ Failed to install language pack: ${errorMessage}`);
+      throw error; // Прерываем установку, если язык важен
+    }
   }
 
   private async createDockerCompose(): Promise<void> {

@@ -40,6 +40,8 @@ export async function loadDeploymentConfig(): Promise<DeploymentConfig> {
       mauticVersion: config.MAUTIC_VERSION,
       mauticThemes: config.MAUTIC_THEMES,
       mauticPlugins: config.MAUTIC_PLUGINS,
+      mauticLanguagePackUrl: config.MAUTIC_LANGUAGE_PACK_URL,
+      mauticLanguage: config.MAUTIC_LANGUAGE,
       mysqlDatabase: config.MYSQL_DATABASE,
       mysqlUser: config.MYSQL_USER,
       mysqlPassword: config.MYSQL_PASSWORD,

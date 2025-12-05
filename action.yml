@@ -1,66 +1,79 @@
 # action.yml
-name: 'Deploy Mautic to Selectel'
-description: 'Deploy Mautic with Docker Compose to a Selectel VPS with automated SSL and monitoring'
-author: 'MautiBox'
+name: "Deploy Mautic to Selectel"
+description: "Deploy Mautic with Docker Compose to a Selectel VPS with automated SSL and monitoring"
+author: "MautiBox"
 
 branding:
-  icon: 'cloud'
-  color: 'blue'
+  icon: "cloud"
+  color: "blue"
 
 inputs:
   # --- Selectel configuration---
   selectel-token:
-    description: 'Selectel API access token (X-Token)'
+    description: "Selectel API access token (X-Token)"
     required: true
   ssh-private-key:
-    description: 'SSH private key for VPS access'
+    description: "SSH private key for VPS access"
     required: true
-  
+  github-token:
+    description: "GitHub Personal Access Token (PAT) for accessing private repositories for themes, plugins, and language packs."
+    required: false
+
   # --- Конфигурация Mautic ---
   email:
-    description: 'Admin email address for Mautic and SSL certificates'
+    description: "Admin email address for Mautic and SSL certificates"
     required: true
   mautic-password:
-    description: 'Admin password for Mautic'
+    description: "Admin password for Mautic"
     required: true
   mautic-version:
-    description: 'Mautic Docker image version'
+    description: "Mautic Docker image version"
     required: false
-    default: '6.0.5-apache'
+    default: "6.0.5-apache"
   mautic-port:
-    description: 'Port for Mautic instance'
+    description: "Port for Mautic instance"
     required: false
-    default: '8001'
-  
+    default: "8001"
+
+  # --- Языковой пакет Mautic ---
+  language-pack-url:
+    description: "URL to the language pack ZIP file (e.g., from a GitHub release)."
+    required: false
+    default: "https://github.com/zaharovrd/language-packs/raw/main/mautibox_ru.zip"
+  language-code:
+    description: "The language code to set as default during installation (e.g., ru, es)."
+    required: false
+    default: "ru"
+
   # --- Конфигурация VPS ---
   domain:
-    description: 'Domain name for your Mautic instance (optional, will use IP if not provided)'
+    description: "Domain name for your Mautic instance (optional, will use IP if not provided)"
     required: false
   vps-name:
-    description: 'Name for the Selectel scalet (server)'
+    description: "Name for the Selectel scalet (server)"
     required: false
-    default: 'mautic-vps'
+    default: "mautic-vps"
   vps-rplan:
-    description: 'Selectel server plan (e.g., small, medium, large)'
+    description: "Selectel server plan (e.g., small, medium, large)"
     required: false
-    default: 'medium'
+    default: "medium"
   vps-location:
-    description: 'Selectel location (e.g., spb0, msk1)'
+    description: "Selectel location (e.g., spb0, msk1)"
     required: false
-    default: 'spb0'
-  
+    default: "spb0"
+
   # --- Плагины и темы Mautic ---
   themes:
     description: |
       List of Mautic theme packages from Packagist or GitHub (one per line).
-      
+
       Packagist packages:
       vendor/theme-name:^1.0
       another-vendor/custom-theme:dev-main
-      
+
       GitHub URLs (public repositories):
       https://github.com/user/theme-repo/archive/refs/heads/main.zip
-      
+
       GitHub URLs with custom directory and authentication:
       https://github.com/company/private-theme/archive/main.zip?directory=MyCustomTheme&token=ghp_xxxxxxxxxxxxxxxxxxxx
       https://github.com/vendor/premium-theme/archive/v2.1.0.zip?directory=PremiumTheme&token=ghp_yyyyyyyyyyyyyyyyyyyy
@@ -69,50 +82,49 @@ inputs:
   plugins:
     description: |
       List of Mautic plugin packages from Packagist or GitHub (one per line).
-      
+
       Packagist packages:
       vendor/plugin-name:^2.0
       another-vendor/custom-plugin:^1.5
-      
+
       GitHub URLs (public repositories):
       https://github.com/user/plugin-repo/archive/refs/heads/main.zip
-      
+
       GitHub URLs with custom directory and authentication:
       https://github.com/company/private-plugin/archive/main.zip?directory=CompanyPlugin&token=ghp_xxxxxxxxxxxxxxxxxxxx
       https://github.com/vendor/premium-plugin/archive/v2.1.0.zip?directory=PremiumPlugin&token=ghp_yyyyyyyyyyyyyyyyyyyy
-      
+
     required: false
 
-  
   # --- Конфигурация Базы Данных ---
   mysql-database:
-    description: 'MySQL database name'
+    description: "MySQL database name"
     required: false
-    default: 'mautic_db'
+    default: "mautic_db"
   mysql-user:
-    description: 'MySQL user name'
+    description: "MySQL user name"
     required: false
-    default: 'mautic_db_user'
+    default: "mautic_db_user"
   mysql-password:
-    description: 'MySQL password'
+    description: "MySQL password"
     required: true
   mysql-root-password:
-    description: 'MySQL root password'
+    description: "MySQL root password"
     required: true
 
 outputs:
   vps-ip:
-    description: 'IP address of the created VPS'
+    description: "IP address of the created VPS"
     value: ${{ steps.deploy.outputs.vps-ip }}
   mautic-url:
-    description: 'URL to access your Mautic instance'
+    description: "URL to access your Mautic instance"
     value: ${{ steps.deploy.outputs.mautic-url }}
   deployment-log:
-    description: 'Path to the deployment log artifact'
+    description: "Path to the deployment log artifact"
     value: ${{ steps.deploy.outputs.deployment-log }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Validate inputs
       shell: bash
@@ -153,10 +165,13 @@ runs:
         # Передаем все inputs как переменные окружения в скрипт
         INPUT_SELECTEL_TOKEN: ${{ inputs.selectel-token }}
         INPUT_SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         INPUT_EMAIL: ${{ inputs.email }}
         INPUT_MAUTIC_PASSWORD: ${{ inputs.mautic-password }}
         INPUT_MAUTIC_VERSION: ${{ inputs.mautic-version }}
         INPUT_MAUTIC_PORT: ${{ inputs.mautic-port }}
+        INPUT_LANGUAGE_PACK_URL: ${{ inputs.language-pack-url }}
+        INPUT_LANGUAGE_CODE: ${{ inputs.language-code }}
         INPUT_DOMAIN: ${{ inputs.domain }}
         INPUT_VPS_NAME: ${{ inputs.vps-name }}
         INPUT_VPS_RPLAN: ${{ inputs.vps-rplan }}

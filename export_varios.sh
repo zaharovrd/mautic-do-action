@@ -13,13 +13,18 @@ export INPUT_VPS_RPLAN="small" # Используйте самый дешевы�
 export INPUT_VPS_LOCATION="spb0"
 
 # Остальные параметры
-export INPUT_MAUTIC_VERSION="6.0.5-apache"
+export INPUT_MAUTIC_VERSION="6.0.6-apache"
 export INPUT_MAUTIC_PORT="8001"
 export INPUT_DOMAIN="" # Оставьте пустым для теста по IP
 export INPUT_THEMES=""
 export INPUT_PLUGINS=""
 export INPUT_MYSQL_DATABASE="mautic_db"
 export INPUT_MYSQL_USER="mautic_user"
+
+# Языковой пакет
+export INPUT_LANGUAGE_PACK_URL="https://github.com/zaharovrd/language-packs/raw/master/mautibox_ru.zip"
+export INPUT_LANGUAGE_CODE="ru"
+
 
 # Очень важная переменная, указывающая на корень проекта
 export ACTION_PATH=$(pwd)
